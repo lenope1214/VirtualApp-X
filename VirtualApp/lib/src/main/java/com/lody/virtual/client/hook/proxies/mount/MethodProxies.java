@@ -27,7 +27,10 @@ class MethodProxies {
                 return super.beforeCall(who, method, args);
             }
             if (args[0] instanceof Integer) {
-                args[0] = getRealUid();
+                // Android 7+: first argument is the (real) user id, not a uid.
+                args[0] = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
+                        ? com.lody.virtual.os.VUserHandle.getUserId(getRealUid())
+                        : getRealUid();
             }
             MethodParameterUtils.replaceFirstAppPkg(args);
             return super.beforeCall(who, method, args);

@@ -1,7 +1,7 @@
 # GOAL — VirtualApp-X modernization
 
 > 살아있는 진행 문서. 작업 단계가 끝날 때마다 상태와 로그를 갱신한다.
-> 마지막 갱신: 2026-11-09 (P2 완료)
+> 마지막 갱신: 2026-11-09 (P3 완료, 빈두 Godot 구동)
 
 ## 최종 목표
 
@@ -39,7 +39,7 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
 | P1-b | arm64 inline hook 엔진 도입 (And64InlineHook, MIT) | 🔄 컴파일만 완료, **기기 동작 검증 필요** |
 | P1-c | 최소 호스트 앱(`host`) + 시험용 타깃(`hello`) 작성 | ✅ 완료 — 호스트가 Android 16에서 크래시 없이 시작, `VirtualCore.startup OK` (A2 충족) |
 | P2 | Android 16 프레임워크 대응: hidden API 우회, AMS/ATMS/PM 훅, 앱 프로세스 기동 | ✅ 완료 — hello가 가상 프로세스(uid 10001, 데이터 `virtual/` 하위)에서 화면까지 뜸 |
-| P3 | split APK 설치 파이프라인, arm64 라이브러리 추출 | ⬜ 다음 |
+| P3 | split APK 설치 파이프라인, arm64 라이브러리 추출 | ✅ 완료 — 빈두 base+split 4개 설치, arm64 .so 3개 추출 (A3 충족) |
 | P4 | 저장소/IO 리다이렉션 (scoped storage 경로) | ⬜ |
 | P5 | 빈두 실행 안정화 (Godot/Vulkan, WebRTC, 알림) | ⬜ |
 | P6 | (필요 시) Google 서비스 | ⬜ |
@@ -71,4 +71,8 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
 - 2026-11-09 P2 완료: 근본 원인은 **hidden API 예외가 전혀 없었던 것**(미러 343/564 null). `org.lsposed.hiddenapibypass:4.3`(Apache-2.0)을 `VirtualCore` static 초기화에서 `addHiddenApiExemptions("L")`로 적용 → `VAX-INJECT` 실패 0건.
 - 2026-11-09 P2: 이어서 수정한 것 — (1) Android 14+는 쓰기 가능한 dex 로드를 거부 → 설치된 `base.apk`를 0444로 chmod, 이후 `InstallResult` success=true도 해소 (2) `hookAndroidVM`(옛 ART 네이티브 메서드 슬롯 스캔)은 API 30+에서 jmethodID가 불투명 인덱스라 SIGSEGV → API 30+에서는 건너뜀(getCallingUid/openDexFile/카메라/오디오 훅 미동작, 필요 시 재구현) (3) `libva++.so` 경로를 `nativeLibraryDir`로 (4) `ApplicationInfo.splitSourceDirs`에 base.apk를 넣던 원본 꼼수 제거(LoadedApk NPE) (5) `getContentProvider`가 Android 10+에서 callingPackage 인자를 가져 → 호스트 패키지로 치환, 이름 인덱스 2 (6) `IContentProvider`가 Android 11~12에서 AttributionSource 등으로 바뀜 → `ProviderHook`은 API 30+에서 패스스루 + AttributionSource를 호스트 uid/패키지로 재작성.
 - 남은 경고(비치명): `IOUniformer` 후킹 시 `Too many memory mapping / cannot read memory map` (IO 리다이렉트 native 훅이 실제로 걸렸는지 미검증 → P4), `AutoFillManagerStub`/`SpecialComponentList` 내 WebView 조회 NPE.
+- 2026-11-10 P3 완료: `installPackage(path)`가 디렉터리(`base.apk`+`split_*.apk`)를 받으면 모두 복사(0444)하고 `PackageSetting.splitApkPaths` 저장 → `ApplicationInfo.splitSourceDirs/splitNames` 채움. arm64 라이브러리는 숨은 `NativeLibraryHelper` 대신 zip 기반 추출기로 base+split 전체에서 ABI를 골라 추출(빈두: `libgodot_android.so`, `libwebrtc_native...so`, `libc++_shared.so`).
+- 2026-11-10 P3 중 수정: `registerReceiver`에 `RECEIVER_EXPORTED` 필요(Android 14+), `IntentFilter.mActions`가 `ArraySet`, `package.ini` 재작성 전 삭제, `getVolumeList` 첫 인자는 uid가 아니라 userId.
+- 2026-11-10 **A4 부분 충족**: 빈두가 VA 프로세스 슬롯(`io.vax.host:p0`)에서 GodotApp 시작 → `libgodot_android.so` 로드 → `OnGodotMainLoopStarted`까지 진행(OpenGL ES 3.2, Adreno 730). 직후 `AudioTrack` 스레드에서 libgodot 오디오 콜백이 SIGSEGV(SEGV_ACCERR, fault addr `0xb40000733b7ff000`).
+- 2026-11-10 **대조 실험**: 기기에 네이티브로 설치된 원본 빈두를 `monkey`로 실행해도 **동일한 주소로 같은 SIGSEGV**가 남. 즉 이 크래시는 VA 문제가 아니라 빈두(Godot OpenSL 오디오) × 이 기기/OS(Android 16, 11/09 업데이트 후) 조합의 문제. 앱 수정/우회는 하지 않고 기록만 함. 확인 필요: OS 업데이트 이전에는 정상이었는지, 빈두 새 빌드가 있는지.
 
