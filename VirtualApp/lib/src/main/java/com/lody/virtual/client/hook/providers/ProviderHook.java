@@ -145,6 +145,16 @@ public class ProviderHook implements InvocationHandler {
             e.printStackTrace();
         }
         MethodBox methodBox = new MethodBox(method, mBase, args);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // IContentProvider gained AttributionSource / extras parameters in Android 11-12, so the
+            // positional decoding below no longer matches. Pass through until it is rewritten.
+            try {
+                fixAttributionSource(args);
+                return methodBox.call();
+            } catch (InvocationTargetException e) {
+                throw e.getCause() != null ? e.getCause() : e;
+            }
+        }
         int start = Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2 ? 1 : 0;
         try {
             String name = method.getName();
@@ -210,6 +220,29 @@ public class ProviderHook implements InvocationHandler {
                 throw e.getCause();
             }
             throw e;
+        }
+    }
+
+    /**
+     * Guest apps carry their virtual uid/package in AttributionSource, but the real binder caller
+     * is the host. Rewrite it to the host identity or the provider rejects the call.
+     */
+    private static void fixAttributionSource(Object[] args) {
+        if (args == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return;
+        }
+        for (int i = 0; i < args.length; i++) {
+            if (args[i] != null && args[i].getClass().getName().equals("android.content.AttributionSource")) {
+                try {
+                    Class<?> builderClass = Class.forName("android.content.AttributionSource$Builder");
+                    Object builder = builderClass.getConstructor(int.class).newInstance(com.lody.virtual.client.core.VirtualCore.get().myUid());
+                    builderClass.getMethod("setPackageName", String.class)
+                            .invoke(builder, com.lody.virtual.client.core.VirtualCore.get().getHostPkg());
+                    args[i] = builderClass.getMethod("build").invoke(builder);
+                } catch (Throwable e) {
+                    VLog.w("ProviderHook", "fix AttributionSource failed: " + e);
+                }
+            }
         }
     }
 

@@ -205,8 +205,10 @@ public class PackageParserEx {
         ai.publicSourceDir = ps.apkPath;
         ai.sourceDir = ps.apkPath;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            ai.splitSourceDirs = new String[]{ps.apkPath};
-            ai.splitPublicSourceDirs = ai.splitSourceDirs;
+            // The old hack listed base.apk as its own split, which breaks LoadedApk on modern
+            // Android (splitNames[] is null). Real split APKs are handled in P3.
+            ai.splitSourceDirs = null;
+            ai.splitPublicSourceDirs = null;
             ApplicationInfoL.scanSourceDir.set(ai, ai.dataDir);
             ApplicationInfoL.scanPublicSourceDir.set(ai, ai.dataDir);
             String hostPrimaryCpuAbi = ApplicationInfoL.primaryCpuAbi.get(VirtualCore.get().getContext().getApplicationInfo());

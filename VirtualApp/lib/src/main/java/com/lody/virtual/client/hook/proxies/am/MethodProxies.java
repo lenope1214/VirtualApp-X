@@ -1356,6 +1356,12 @@ class MethodProxies {
         @Override
         public Object call(Object who, Method method, Object... args) throws Throwable {
             int nameIdx = getProviderNameIndex();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && args.length > 2
+                    && args[1] instanceof String && args[2] instanceof String) {
+                // Android 10+: (caller, callingPackage, name, userId, stable)
+                args[1] = getHostPkg();
+                nameIdx = 2;
+            }
             String name = (String) args[nameIdx];
             int userId = VUserHandle.myUserId();
             ProviderInfo info = VPackageManager.get().resolveContentProvider(name, 0, userId);
