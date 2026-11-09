@@ -46,4 +46,6 @@ android {
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
+    // Android 9+ hidden API exemption (Apache-2.0). Without it most framework mirrors resolve to null.
+    api 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
 }

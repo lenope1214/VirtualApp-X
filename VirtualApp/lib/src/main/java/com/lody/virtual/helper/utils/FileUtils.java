@@ -148,7 +148,7 @@ public class FileUtils {
             FileChannel iChannel = inputStream.getChannel();
             FileChannel oChannel = outputStream.getChannel();
 
-            ByteBuffer buffer = ByteBuffer.allocate(1024);
+            ByteBuffer buffer = ByteBuffer.allocate(64 * 1024);
             while (true) {
                 buffer.clear();
                 int r = iChannel.read(buffer);

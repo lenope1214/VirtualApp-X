@@ -374,6 +374,15 @@ void hookAndroidVM(JArrayClass<jobject> javaMethods,
 
     JNIEnv *env = Environment::current();
 
+    if (apiLevel >= 30) {
+        // Android 11+: jmethodID may be an opaque index instead of an ArtMethod*, so scanning it
+        // for the JNI entry point (measureNativeOffset) dereferences garbage and crashes.
+        // The native-method swaps below (getCallingUid / openDexFile / camera / audio) are skipped
+        // until they are re-implemented on top of real ArtMethod pointers.
+        ALOGW("hookAndroidVM skipped on API %d", apiLevel);
+        return;
+    }
+
     JNINativeMethod methods[] = {
             NATIVE_METHOD((void *) mark, "nativeMark", "()V"),
     };

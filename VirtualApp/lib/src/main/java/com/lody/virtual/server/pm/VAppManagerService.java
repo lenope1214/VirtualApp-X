@@ -290,7 +290,8 @@ public class VAppManagerService implements IAppManager {
                     return;
                 }
                 FileUtils.chmod(packageFile.getParentFile().getAbsolutePath(), FileUtils.FileMode.MODE_755);
-                FileUtils.chmod(packageFile.getAbsolutePath(), FileUtils.FileMode.MODE_755);
+                // Android 14+ refuses to load dex from a file the app can write to.
+                FileUtils.chmod(packageFile.getAbsolutePath(), 0444);
             }
         } catch (Exception e) {
             e.printStackTrace();

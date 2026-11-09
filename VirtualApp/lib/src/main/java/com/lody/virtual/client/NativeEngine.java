@@ -124,7 +124,7 @@ public class NativeEngine {
 
     public static void enableIORedirect() {
         try {
-            String soPath = String.format("/data/data/%s/lib/libva++.so", VirtualCore.get().getHostPkg());
+            String soPath = new File(VirtualCore.get().getContext().getApplicationInfo().nativeLibraryDir, "libva++.so").getPath();
             if (!new File(soPath).exists()) {
                 throw new RuntimeException("Unable to find the so.");
             }
