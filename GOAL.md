@@ -75,4 +75,5 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
 - 2026-11-10 P3 중 수정: `registerReceiver`에 `RECEIVER_EXPORTED` 필요(Android 14+), `IntentFilter.mActions`가 `ArraySet`, `package.ini` 재작성 전 삭제, `getVolumeList` 첫 인자는 uid가 아니라 userId.
 - 2026-11-10 **A4 부분 충족**: 빈두가 VA 프로세스 슬롯(`io.vax.host:p0`)에서 GodotApp 시작 → `libgodot_android.so` 로드 → `OnGodotMainLoopStarted`까지 진행(OpenGL ES 3.2, Adreno 730). 직후 `AudioTrack` 스레드에서 libgodot 오디오 콜백이 SIGSEGV(SEGV_ACCERR, fault addr `0xb40000733b7ff000`).
 - 2026-11-10 **대조 실험**: 기기에 네이티브로 설치된 원본 빈두를 `monkey`로 실행해도 **동일한 주소로 같은 SIGSEGV**가 남. 즉 이 크래시는 VA 문제가 아니라 빈두(Godot OpenSL 오디오) × 이 기기/OS(Android 16, 11/09 업데이트 후) 조합의 문제. 앱 수정/우회는 하지 않고 기록만 함. 확인 필요: OS 업데이트 이전에는 정상이었는지, 빈두 새 빌드가 있는지.
+- 2026-11-10 **일반 앱 검증(kr.chat.anon, 사용자 본인의 앱 '랑데부')**: 단일 APK(targetSdk 36, arm64) 설치→실행 성공, 로그인 화면(Flutter 추정) 렌더링, 터치로 입력란 포커스·소프트 키보드·텍스트 입력 정상, 443 연결 수립 및 Firebase 초기화 성공 → A5(터치·네트워크) 일반 앱 기준 충족. 비치명 경고: `FirebaseMessaging` notification delegate 오류(샌드박스 패키지에 대한 GMS 인식 문제 → P6), `AutoFillManagerStub` NPE(Application null 시점의 DeviceConfig 조회).
 
