@@ -1,7 +1,7 @@
 # GOAL — VirtualApp-X modernization
 
 > 살아있는 진행 문서. 작업 단계가 끝날 때마다 상태와 로그를 갱신한다.
-> 마지막 갱신: 2026-11-09
+> 마지막 갱신: 2026-11-09 (P2 완료)
 
 ## 최종 목표
 
@@ -38,8 +38,8 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
 | P1-a | `lib` native 코드 arm64 컴파일 (legacy syscall 대응) | ✅ 완료 |
 | P1-b | arm64 inline hook 엔진 도입 (And64InlineHook, MIT) | 🔄 컴파일만 완료, **기기 동작 검증 필요** |
 | P1-c | 최소 호스트 앱(`host`) + 시험용 타깃(`hello`) 작성 | ✅ 완료 — 호스트가 Android 16에서 크래시 없이 시작, `VirtualCore.startup OK` (A2 충족) |
-| P2 | Android 16 프레임워크 대응: hidden API 우회, AMS/ATMS/PM 훅, 앱 프로세스 기동 | 🔄 진행 중 — 설치(파서)는 동작, 가상 프로세스 시작은 훅 미러 보정 중 |
-| P3 | split APK 설치 파이프라인, arm64 라이브러리 추출 | ⬜ |
+| P2 | Android 16 프레임워크 대응: hidden API 우회, AMS/ATMS/PM 훅, 앱 프로세스 기동 | ✅ 완료 — hello가 가상 프로세스(uid 10001, 데이터 `virtual/` 하위)에서 화면까지 뜸 |
+| P3 | split APK 설치 파이프라인, arm64 라이브러리 추출 | ⬜ 다음 |
 | P4 | 저장소/IO 리다이렉션 (scoped storage 경로) | ⬜ |
 | P5 | 빈두 실행 안정화 (Godot/Vulkan, WebRTC, 알림) | ⬜ |
 | P6 | (필요 시) Google 서비스 | ⬜ |
@@ -68,3 +68,7 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
 - 알려진 미해결: `install result: success=false pkg=null`(실제로는 설치됨 → `InstallResult` 직렬화 확인 필요). 가상 프로세스에서 `WindowManagerGlobal`/`NotificationManager`/`ClipboardManager` 서비스 필드명이 Android 16에서 바뀜.
 - 다음: (1) `VAX-INJECT` 실패 훅의 미러 보정 (2) 가상 프로세스 시작 후 `HelloActivity`가 뜨는지 확인 (3) `InstallResult` 직렬화 버그 (4) 이후 P3(split APK)로 빈두.
 - 범위 메모: 가상 환경 탐지·무결성 검사·치트 방지 우회는 작업 범위가 아니다(사용자 문서의 `범위 밖` 섹션이 비어 있어도 유지). 도깨비의세계는 설치·실행 호환성까지만.
+- 2026-11-09 P2 완료: 근본 원인은 **hidden API 예외가 전혀 없었던 것**(미러 343/564 null). `org.lsposed.hiddenapibypass:4.3`(Apache-2.0)을 `VirtualCore` static 초기화에서 `addHiddenApiExemptions("L")`로 적용 → `VAX-INJECT` 실패 0건.
+- 2026-11-09 P2: 이어서 수정한 것 — (1) Android 14+는 쓰기 가능한 dex 로드를 거부 → 설치된 `base.apk`를 0444로 chmod, 이후 `InstallResult` success=true도 해소 (2) `hookAndroidVM`(옛 ART 네이티브 메서드 슬롯 스캔)은 API 30+에서 jmethodID가 불투명 인덱스라 SIGSEGV → API 30+에서는 건너뜀(getCallingUid/openDexFile/카메라/오디오 훅 미동작, 필요 시 재구현) (3) `libva++.so` 경로를 `nativeLibraryDir`로 (4) `ApplicationInfo.splitSourceDirs`에 base.apk를 넣던 원본 꼼수 제거(LoadedApk NPE) (5) `getContentProvider`가 Android 10+에서 callingPackage 인자를 가져 → 호스트 패키지로 치환, 이름 인덱스 2 (6) `IContentProvider`가 Android 11~12에서 AttributionSource 등으로 바뀜 → `ProviderHook`은 API 30+에서 패스스루 + AttributionSource를 호스트 uid/패키지로 재작성.
+- 남은 경고(비치명): `IOUniformer` 후킹 시 `Too many memory mapping / cannot read memory map` (IO 리다이렉트 native 훅이 실제로 걸렸는지 미검증 → P4), `AutoFillManagerStub`/`SpecialComponentList` 내 WebView 조회 NPE.
+
