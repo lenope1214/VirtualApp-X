@@ -923,6 +923,14 @@ static void SubstrateHookFunction(SubstrateProcessRef process, void *symbol, voi
 }
 #endif
 
+#if defined(__aarch64__)
+// arm64: Substrate has no 64-bit ARM implementation, delegate to And64InlineHook (MIT).
+#include "../And64InlineHook/And64InlineHook.hpp"
+static void SubstrateHookFunction(SubstrateProcessRef process, void *symbol, void *replace, void **result) {
+    A64HookFunction(symbol, replace, result);
+}
+#endif
+
 _extern void MSHookFunction(void *symbol, void *replace, void **result) {
      SubstrateHookFunction(NULL, symbol, replace, result);
 }

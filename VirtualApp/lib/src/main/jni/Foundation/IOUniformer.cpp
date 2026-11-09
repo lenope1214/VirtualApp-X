@@ -10,6 +10,8 @@
 #include "SandboxFs.h"
 #include "Path.h"
 #include "SymbolFinder.h"
+#include <sys/syscall.h>
+#include "LegacySyscall.h"
 
 bool iu_loaded = false;
 

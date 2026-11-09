@@ -21,6 +21,10 @@ LOCAL_SRC_FILES := Jni/VAJni.cpp \
                    Substrate/SubstrateHook.cpp \
                    Substrate/SubstratePosixMemory.cpp \
 
+ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
+LOCAL_SRC_FILES += And64InlineHook/And64InlineHook.cpp
+endif
+
 LOCAL_LDLIBS := -llog -latomic
 LOCAL_STATIC_LIBRARIES := fb
 
