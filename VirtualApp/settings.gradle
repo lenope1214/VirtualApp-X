@@ -17,4 +17,4 @@ dependencyResolutionManagement {
 
 rootProject.name = 'VirtualApp'
 // TODO(P0): re-enable ':app' after migrating it to AndroidX/modern Gradle
-include ':lib'
+include ':lib', ':host', ':hello'

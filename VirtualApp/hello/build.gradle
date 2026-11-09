@@ -1,0 +1,21 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Tiny target app used to validate the sandbox before trying real apps (bindu).
+android {
+    namespace 'io.vax.hello'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "io.vax.hello"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}

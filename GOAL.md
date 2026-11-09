@@ -38,7 +38,7 @@ Android 16(API 36)에서 **가상 공간 안에 앱을 설치하고 실행**하�
 | P0 | 현대 툴체인으로 `lib` 빌드 (JDK17/AGP8.10/Gradle8.11/NDK27) | ✅ 완료 (armeabi-v7a/x86 기준) |
 | P1-a | `lib` native 코드 arm64 컴파일 (legacy syscall 대응) | ✅ 완료 |
 | P1-b | arm64 inline hook 엔진 도입 (And64InlineHook, MIT) | 🔄 컴파일만 완료, **기기 동작 검증 필요** |
-| P1-c | 최소 호스트 앱 신규 작성 (AndroidX, 설치/실행 버튼만) | ⬜ |
+| P1-c | 최소 호스트 앱(`host`) + 시험용 타깃(`hello`) 작성 | ✅ 완료 — 호스트가 Android 16에서 크래시 없이 시작, `VirtualCore.startup OK` (A2 충족) |
 | P2 | Android 16 프레임워크 대응: hidden API 우회, AMS/ATMS/PM 훅, 앱 프로세스 기동 | ⬜ |
 | P3 | split APK 설치 파이프라인, arm64 라이브러리 추출 | ⬜ |
 | P4 | 저장소/IO 리다이렉션 (scoped storage 경로) | ⬜ |
@@ -59,3 +59,6 @@ Android 16(API 36)에서 **가상 공간 안에 앱을 설치하고 실행**하�
 - 2026-11-09 P1-a: `Foundation/LegacySyscall.h` 추가. arm64에 없는 legacy syscall(open/chmod/stat64/rename 등)을 `*at` 계열로 변환. 모던 API(>20)에서는 `*at` 훅만 설치되므로 legacy 훅은 실행되지 않음.
 - 2026-11-09 P1-b: `Substrate`에는 arm64 구현이 없음 → `And64InlineHook`(MIT, 서드파티)을 `jni/And64InlineHook/`에 포함하고 `MSHookFunction`을 연결. 이 엔진은 명령어 재배치 지원 범위가 제한적이라 libc 훅 대상 함수에서 실제 동작 확인이 필요(미검증).
 - 알려진 위험: `Foundation/IOUniformer.cpp`의 `fstat` 훅 시그니처가 원본부터 잘못되어 있음(fd 대신 path). 설치 대상이 아니므로 방치, 필요 시 정리.
+- 2026-11-09 P1-c: `host` 모듈(최소 호스트, adb extras로 install/launch 제어)과 `hello` 모듈(시험용 타깃 앱) 추가. 호스트는 Z Flip 4(Android 16)에서 정상 시작. `app` 모듈 마이그레이션은 폐기하고 `host`로 대체.
+- 2026-11-09 Play Protect: `targetSdk 28` 호스트를 **새로 설치**하면 "안전하지 않은 앱 차단됨 — Android 이전 버전에 맞게 개발됨" 대화상자가 뜸(`-r` 덮어쓰기에서는 안 뜸). 기기의 `min_supported_target_sdk`는 28이라 OS 경고가 아니라 Play Protect 판정. 호스트 `targetSdk`를 34로 올려 재시험 중(결과 미확인). 대화상자는 보안 장치이므로 자동으로 누르지 않는다.
+- 다음: `hello`를 가상 공간에 설치·실행(`--es install io.vax.hello --es launch io.vax.hello`)하여 P2 진입.

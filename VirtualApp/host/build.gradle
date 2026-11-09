@@ -1,0 +1,34 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'io.vax.host'
+    compileSdk 35
+    ndkVersion '27.3.13750724'
+
+    defaultConfig {
+        applicationId "io.vax.host"
+        minSdk 21
+        // Play Protect blocks fresh installs of apps with an old targetSdk (28 was flagged on Android 16)
+        targetSdk 34
+        versionCode 1
+        versionName "0.1"
+        ndk {
+            abiFilters "arm64-v8a"
+        }
+    }
+    buildTypes {
+        debug {
+            debuggable true
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation project(':lib')
+}
