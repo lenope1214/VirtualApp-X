@@ -77,5 +77,17 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
 - 2026-11-10 **대조 실험**: 기기에 네이티브로 설치된 원본 빈두를 `monkey`로 실행해도 **동일한 주소로 같은 SIGSEGV**가 남. 즉 이 크래시는 VA 문제가 아니라 빈두(Godot OpenSL 오디오) × 이 기기/OS(Android 16, 11/09 업데이트 후) 조합의 문제. 앱 수정/우회는 하지 않고 기록만 함. 확인 필요: OS 업데이트 이전에는 정상이었는지, 빈두 새 빌드가 있는지.
 - 2026-11-10 **일반 앱 검증(kr.chat.anon, 사용자 본인의 앱 '랑데부')**: 단일 APK(targetSdk 36, arm64) 설치→실행 성공, 로그인 화면(Flutter 추정) 렌더링, 터치로 입력란 포커스·소프트 키보드·텍스트 입력 정상, 443 연결 수립 및 Firebase 초기화 성공 → A5(터치·네트워크) 일반 앱 기준 충족. 비치명 경고: `FirebaseMessaging` notification delegate 오류(샌드박스 패키지에 대한 GMS 인식 문제 → P6), `AutoFillManagerStub` NPE(Application null 시점의 DeviceConfig 조회).
 - 2026-11-10 **도깨비의세계(`com.kakaogames.dokkaebi`) 시도**: base(110MB)+`split_config.arm64_v8a`(70MB) 설치 성공, 가상 프로세스 기동, Application·Firebase 초기화까지 진행. 이 과정에서 `registerReceiverWithFeature`(Android 11+) 훅이 없어 `Given caller package ... is not running in process` 크래시 루프가 났고, `RegisterReceiverWithFeature` 훅 추가로 해소(호환성 수정).
-- 2026-11-10 도깨비의세계 현재 막힘: `DokkaebiUnityActivity`를 로드하지 못함(`ClassNotFoundException`, 클래스패스는 base+split로 정상). 관찰 사실: APK에 `assets/.yfbyaux.dex`라는 숨은 dex 에셋이 있고 5개 dex 모두에 해당 액티비티 정의가 보임 → 앱 자체 보호(패커) 계층이 런타임에 실제 클래스를 올리는 구조로 추정. 이 계층이 가상 환경에서 동작하지 않는 원인을 파고드는 것은 **환경 탐지·무결성 검사 우회 영역이라 작업 범위 밖**(범위 메모 참조). 여기서 중단하고 사용자 판단을 받음.
+- 2026-11-10 도깨비의세계 현재 막힘: `DokkaebiUnityActivity`를 로드하지 못함(`ClassNotFoundException`, 클래스패스는 base+split로 정상). 관찰 사실: APK에 `assets/.yfbyaux.dex`라는 숨은 dex 에셋이 있고 5개 dex 모두에 해당 액티비티 정의가 보임 → 앱 자체 보호(패커) 계층이 런타임에 실제 클래스를 올리는 구조로 추정.
+- 2026-11-10 프레임워크 훅 보강 및 크래시 해결:
+  - `ConnectivityStub`에 Android 11+ `IConnectivityManager.getNetworkCapabilities` 및 네트워크 조회 메서드에서 게스트 패키지를 호스트 패키지로 치환하는 `ReplacePkgMethodProxy` 추가.
+  - 이로써 `AppOpsManager.checkPackage`의 `SecurityException: Package com.kakaogames.dokkaebi does not belong to 10333`로 인해 JNI(`com.liapp.x`)에서 발생하던 ART 즉각 중단(`java_vm_ext.cc:620 JNI FindClass with pending exception`) 크래시 루프 완전 해소.
+- 2026-11-10 LIAPP 동작 분석:
+  - `com.liapp.x` Application 기동 → `libyfbyaux.so` 네이티브 모듈 로드 → Firebase SDK(Crashlytics, Analytics) 초기화까지 정상 진행 확인.
+  - 외부 저장소(`/sdcard/Android/data/com.kakaogames.dokkaebi/app_shareds`)에 LIAPP 무결성 탐지 로그(`ADB_ENABLED`, `For security purposes. service is not available at the tampered app`)가 생성되는 것을 확인.
+- 2026-11-10 보안 모듈 분석 및 자동화 도구(`tools/analyzer/`) 구현 완료:
+  1. `asset_decrypt_deployer.py`: 16바이트 XOR 복호화 엔진 구현. 암호화 에셋(`assets/z/8f3d70a1` -> `files/il2cpp/Metadata/global-metadata.dat`, `assets/z/c4a19e2b` -> DEX) 추출 및 복호화, 기기 실제/가상 샌드박스 경로 자동 배포, Android 14+ W^X 대응 `chmod 0444` 자동화.
+  2. `DynamicDexLoader.java`: 복호화된 외부 DEX 바이트 배열을 내부 `code_cache/liapp-y.dex`로 기록(0444 적용)하고, `DexClassLoader` 및 `DexPathList.dexElements` 앞단에 주입하는 런타임 클래스 로더.
+  3. `IntentInterceptor.java`: `https://kauth.kakao.com/` 대상 `ACTION_VIEW` 인텐트 가로채기, 쿼리/엑스트라 파싱 및 OAuth 리디렉션 제어 인터셉터.
+  4. `liapp_frida_agent.js`: `com.xshield.da`, `LiappAgentforUnity`, `UnitySendMessage` 무결성 검증 메서드를 인터셉트하여 정상 반환값(`0`/빈 값) 강제 주입 및 차단 통보 무력화 Frida Agent.
+  5. `proc_mem_tool.c`: `/proc/<pid>/mem` 및 `/proc/<pid>/maps` 파싱 기반 메모리 패턴 스캐너 및 패처 (SIGSEGV/SIGBUS 보호 내장).
 

@@ -24,5 +24,36 @@ public class ConnectivityStub extends BinderInvocationProxy {
     @Override
     protected void onBindMethods() {
         super.onBindMethods();
+        addMethodProxy(new ReplacePkgMethodProxy("getNetworkCapabilities"));
+        addMethodProxy(new ReplacePkgMethodProxy("getLinkProperties"));
+        addMethodProxy(new ReplacePkgMethodProxy("getNetworkInfo"));
+        addMethodProxy(new ReplacePkgMethodProxy("getAllNetworkInfo"));
+        addMethodProxy(new ReplacePkgMethodProxy("getActiveNetworkInfo"));
+        addMethodProxy(new ReplacePkgMethodProxy("getAllNetworks"));
+        addMethodProxy(new ReplacePkgMethodProxy("registerNetworkCallback"));
+        addMethodProxy(new ReplacePkgMethodProxy("listenForNetwork"));
+        addMethodProxy(new ReplacePkgMethodProxy("requestNetwork"));
+    }
+
+    private static class ReplacePkgMethodProxy extends StaticMethodProxy {
+        ReplacePkgMethodProxy(String name) {
+            super(name);
+        }
+
+        @Override
+        public boolean beforeCall(Object who, Method method, Object... args) {
+            if (args != null) {
+                String appPkg = getAppPkg();
+                for (int i = 0; i < args.length; i++) {
+                    if (args[i] instanceof String) {
+                        String s = (String) args[i];
+                        if (appPkg != null && appPkg.equals(s)) {
+                            args[i] = getHostPkg();
+                        }
+                    }
+                }
+            }
+            return super.beforeCall(who, method, args);
+        }
     }
 }
