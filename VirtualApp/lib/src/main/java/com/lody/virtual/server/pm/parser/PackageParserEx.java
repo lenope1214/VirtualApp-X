@@ -115,7 +115,11 @@ public class PackageParserEx {
         try {
             p.writeInt(4);
             pkg.writeToParcel(p, 0);
-            FileOutputStream fos = new FileOutputStream(VEnvironment.getPackageCacheFile(packageName));
+            File cacheFile = VEnvironment.getPackageCacheFile(packageName);
+            if (cacheFile.exists()) {
+                cacheFile.delete();
+            }
+            FileOutputStream fos = new FileOutputStream(cacheFile);
             fos.write(p.marshall());
             fos.close();
         } catch (Exception e) {
@@ -207,8 +211,19 @@ public class PackageParserEx {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             // The old hack listed base.apk as its own split, which breaks LoadedApk on modern
             // Android (splitNames[] is null). Real split APKs are handled in P3.
-            ai.splitSourceDirs = null;
-            ai.splitPublicSourceDirs = null;
+            if (ps.splitApkPaths != null && ps.splitApkPaths.length > 0) {
+                String[] names = new String[ps.splitApkPaths.length];
+                for (int i = 0; i < names.length; i++) {
+                    String n = new java.io.File(ps.splitApkPaths[i]).getName();   // split_config.ko.apk
+                    names[i] = n.substring("split_".length(), n.length() - ".apk".length());
+                }
+                ai.splitSourceDirs = ps.splitApkPaths;
+                ai.splitPublicSourceDirs = ps.splitApkPaths;
+                ApplicationInfoL.splitNames.set(ai, names);
+            } else {
+                ai.splitSourceDirs = null;
+                ai.splitPublicSourceDirs = null;
+            }
             ApplicationInfoL.scanSourceDir.set(ai, ai.dataDir);
             ApplicationInfoL.scanPublicSourceDir.set(ai, ai.dataDir);
             String hostPrimaryCpuAbi = ApplicationInfoL.primaryCpuAbi.get(VirtualCore.get().getContext().getApplicationInfo());

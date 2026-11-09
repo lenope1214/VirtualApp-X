@@ -20,6 +20,72 @@ public class NativeLibraryHelperCompat {
 
 	private static String TAG = NativeLibraryHelperCompat.class.getSimpleName();
 
+	/**
+	 * Extracts lib/<abi>/*.so from base + split APKs into one directory. The ABI is chosen across
+	 * all APKs together (the arm64 libraries usually live in split_config.arm64_v8a.apk).
+	 * Pure zip based, so it does not depend on hidden NativeLibraryHelper internals.
+	 */
+	public static int copyNativeBinaries(java.util.List<File> apks, File sharedLibraryDir) {
+		Set<String> abis = new HashSet<String>();
+		for (File apk : apks) {
+			Set<String> found = getABIsFromApk(apk.getAbsolutePath());
+			if (found != null) {
+				abis.addAll(found);
+			}
+		}
+		if (abis.isEmpty()) {
+			return 0;
+		}
+		String abi = null;
+		String[] preferred = android.os.Process.is64Bit() ? Build.SUPPORTED_64_BIT_ABIS : Build.SUPPORTED_32_BIT_ABIS;
+		for (String candidate : preferred) {
+			if (abis.contains(candidate)) {
+				abi = candidate;
+				break;
+			}
+		}
+		if (abi == null) {
+			VLog.e(TAG, "No usable ABI among %s", abis);
+			return -1;
+		}
+		String prefix = "lib/" + abi + "/";
+		int count = 0;
+		sharedLibraryDir.mkdirs();
+		for (File apk : apks) {
+			try (ZipFile zip = new ZipFile(apk)) {
+				Enumeration<? extends ZipEntry> entries = zip.entries();
+				while (entries.hasMoreElements()) {
+					ZipEntry entry = entries.nextElement();
+					String name = entry.getName();
+					if (entry.isDirectory() || name.contains("../") || !name.startsWith(prefix) || !name.endsWith(".so")) {
+						continue;
+					}
+					String leaf = name.substring(prefix.length());
+					if (leaf.indexOf('/') >= 0) {
+						continue; // nested directory, ignore
+					}
+					File out = new File(sharedLibraryDir, leaf);
+					try (java.io.InputStream in = zip.getInputStream(entry);
+						 java.io.FileOutputStream os = new java.io.FileOutputStream(out)) {
+						byte[] buf = new byte[64 * 1024];
+						int n;
+						while ((n = in.read(buf)) > 0) {
+							os.write(buf, 0, n);
+						}
+					}
+					out.setReadable(true, false);
+					out.setExecutable(true, false);
+					count++;
+				}
+			} catch (Exception e) {
+				VLog.e(TAG, "extract libs from %s failed: %s", apk.getName(), e);
+				return -1;
+			}
+		}
+		VLog.d(TAG, "extracted %d libs (%s) into %s", count, abi, sharedLibraryDir);
+		return count;
+	}
+
 	public static int copyNativeBinaries(File apkFile, File sharedLibraryDir) {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 			return copyNativeBinariesAfterL(apkFile, sharedLibraryDir);

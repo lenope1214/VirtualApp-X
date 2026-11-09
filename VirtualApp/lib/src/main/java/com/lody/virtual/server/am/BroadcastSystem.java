@@ -154,13 +154,13 @@ public class BroadcastSystem {
             String componentAction = String.format("_VA_%s_%s", info.packageName, info.name);
             IntentFilter componentFilter = new IntentFilter(componentAction);
             BroadcastReceiver r = new StaticBroadcastReceiver(setting.appId, info, componentFilter);
-            mContext.registerReceiver(r, componentFilter, null, mScheduler);
+            registerExported(r, componentFilter);
             receivers.add(r);
             for (VPackage.ActivityIntentInfo ci : receiver.intents) {
                 IntentFilter cloneFilter = new IntentFilter(ci.filter);
                 SpecialComponentList.protectIntentFilter(cloneFilter);
                 r = new StaticBroadcastReceiver(setting.appId, info, cloneFilter);
-                mContext.registerReceiver(r, cloneFilter, null, mScheduler);
+                registerExported(r, cloneFilter);
                 receivers.add(r);
             }
         }
@@ -276,6 +276,15 @@ public class BroadcastSystem {
             if (!mAMS.handleStaticBroadcast(appId, info, intent, new PendingResultData(result))) {
                 result.finish();
             }
+        }
+    }
+
+    private void registerExported(BroadcastReceiver r, IntentFilter filter) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            // Android 14+ requires an explicit export flag for non-system broadcasts.
+            mContext.registerReceiver(r, filter, null, mScheduler, Context.RECEIVER_EXPORTED);
+        } else {
+            mContext.registerReceiver(r, filter, null, mScheduler);
         }
     }
 }

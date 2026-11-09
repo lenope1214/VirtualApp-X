@@ -11,4 +11,5 @@ public class ApplicationInfoL {
     public static RefObject<String> scanSourceDir;
     public static RefObject<String[]> splitPublicSourceDirs;
     public static RefObject<String[]> splitSourceDirs;
+    public static RefObject<String[]> splitNames;
 }

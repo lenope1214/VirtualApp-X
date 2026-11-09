@@ -31,6 +31,7 @@ import com.lody.virtual.server.pm.parser.PackageParserEx;
 import com.lody.virtual.server.pm.parser.VPackage;
 
 import java.io.File;
+import java.util.Collections;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -149,6 +150,21 @@ public class VAppManagerService implements IAppManager {
             return InstallResult.makeFailure("path = NULL");
         }
         File packageFile = new File(path);
+        // A directory means "base.apk + split_*.apk" (the layout of /data/app/<pkg>/ on the device).
+        List<File> splitFiles = new ArrayList<>();
+        if (packageFile.isDirectory()) {
+            File[] children = packageFile.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    String n = child.getName();
+                    if (n.startsWith("split_") && n.endsWith(".apk")) {
+                        splitFiles.add(child);
+                    }
+                }
+            }
+            Collections.sort(splitFiles);
+            packageFile = new File(packageFile, "base.apk");
+        }
         if (!packageFile.exists() || !packageFile.isFile()) {
             return InstallResult.makeFailure("Package File is not exist.");
         }
@@ -180,12 +196,21 @@ public class VAppManagerService implements IAppManager {
         File libDir = new File(appDir, "lib");
         if (res.isUpdate) {
             FileUtils.deleteDir(libDir);
+            File[] oldSplits = appDir.listFiles();
+            if (oldSplits != null) {
+                for (File f : oldSplits) {
+                    if (f.getName().startsWith("split_")) {
+                        f.delete();
+                    }
+                }
+            }
             VEnvironment.getOdexFile(pkg.packageName).delete();
             VActivityManagerService.get().killAppByPkg(pkg.packageName, VUserHandle.USER_ALL);
         }
         if (!libDir.exists() && !libDir.mkdirs()) {
             return InstallResult.makeFailure("Unable to create lib dir.");
         }
+        String[] splitPaths = null;
         boolean dependSystem = (flags & InstallStrategy.DEPEND_SYSTEM_IF_EXIST) != 0
                 && VirtualCore.get().isOutsideInstalled(pkg.packageName);
 
@@ -193,7 +218,10 @@ public class VAppManagerService implements IAppManager {
             dependSystem = false;
         }
 
-        NativeLibraryHelperCompat.copyNativeBinaries(new File(path), libDir);
+        List<File> allApks = new ArrayList<>();
+        allApks.add(packageFile);
+        allApks.addAll(splitFiles);
+        NativeLibraryHelperCompat.copyNativeBinaries(allApks, libDir);
         if (!dependSystem) {
             File privatePackageFile = new File(appDir, "base.apk");
             File parentFolder = privatePackageFile.getParentFile();
@@ -209,6 +237,22 @@ public class VAppManagerService implements IAppManager {
                 return InstallResult.makeFailure("Unable to copy the package file.");
             }
             packageFile = privatePackageFile;
+            List<String> privateSplits = new ArrayList<>();
+            for (File split : splitFiles) {
+                File dst = new File(appDir, split.getName());
+                if (dst.exists() && !dst.delete()) {
+                    VLog.w(TAG, "Warning: unable to delete file : " + dst.getPath());
+                }
+                try {
+                    FileUtils.copyFile(split, dst);
+                } catch (IOException e) {
+                    dst.delete();
+                    return InstallResult.makeFailure("Unable to copy split " + split.getName());
+                }
+                chmodPackageDictionary(dst);
+                privateSplits.add(dst.getPath());
+            }
+            splitPaths = privateSplits.isEmpty() ? null : privateSplits.toArray(new String[0]);
         }
         if (existOne != null) {
             PackageCacheManager.remove(pkg.packageName);
@@ -223,6 +267,7 @@ public class VAppManagerService implements IAppManager {
         ps.dependSystem = dependSystem;
         ps.apkPath = packageFile.getPath();
         ps.libPath = libDir.getPath();
+        ps.splitApkPaths = splitPaths;
         ps.packageName = pkg.packageName;
         ps.appId = VUserHandle.getAppId(mUidSystem.getOrCreateUid(pkg));
         if (res.isUpdate) {

@@ -61,7 +61,11 @@ public class MainActivity extends Activity {
     private void doInstall(String pkg) throws Exception {
         ApplicationInfo ai = getPackageManager().getApplicationInfo(pkg, 0);
         Log.i(TAG, "install " + pkg + " from " + ai.sourceDir);
-        InstallResult r = VirtualCore.get().installPackage(ai.sourceDir, InstallStrategy.UPDATE_IF_EXIST);
+        // Split apps are installed from their directory (base.apk + split_*.apk).
+        String path = ai.splitSourceDirs != null && ai.splitSourceDirs.length > 0
+                ? new java.io.File(ai.sourceDir).getParent() : ai.sourceDir;
+        Log.i(TAG, "install path " + path + " splits=" + (ai.splitSourceDirs == null ? 0 : ai.splitSourceDirs.length));
+        InstallResult r = VirtualCore.get().installPackage(path, InstallStrategy.UPDATE_IF_EXIST);
         Log.i(TAG, "install result: success=" + (r != null && r.isSuccess)
                 + " pkg=" + (r == null ? null : r.packageName)
                 + " error=" + (r == null ? null : r.error));

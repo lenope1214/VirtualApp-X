@@ -27,6 +27,8 @@ public class PackageSetting implements Parcelable {
     public String packageName;
     public String apkPath;
     public String libPath;
+    /** Absolute paths of split_*.apk files (config splits, asset packs); null if not split. */
+    public String[] splitApkPaths;
     public boolean dependSystem;
     @Deprecated
     public boolean skipDexOpt;
@@ -47,6 +49,7 @@ public class PackageSetting implements Parcelable {
         //noinspection unchecked
         this.userState = in.readSparseArray(PackageUserState.class.getClassLoader());
         this.skipDexOpt = in.readByte() != 0;
+        this.splitApkPaths = in.createStringArray();
     }
 
     public InstalledAppInfo getAppInfo() {
@@ -96,6 +99,7 @@ public class PackageSetting implements Parcelable {
         //noinspection unchecked
         dest.writeSparseArray((SparseArray) this.userState);
         dest.writeByte(this.skipDexOpt ? (byte) 1 : (byte) 0);
+        dest.writeStringArray(this.splitApkPaths);
     }
 
     public boolean isLaunched(int userId) {

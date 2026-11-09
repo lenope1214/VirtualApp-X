@@ -112,8 +112,16 @@ public final class SpecialComponentList {
     }
 
     public static void protectIntentFilter(IntentFilter filter) {
-        if (filter != null) {
-            List<String> actions = mirror.android.content.IntentFilter.mActions.get(filter);
+        if (filter == null) {
+            return;
+        }
+        Object raw = mirror.android.content.IntentFilter.mActions.get(filter);
+        if (raw == null) {
+            return;
+        }
+        if (raw instanceof List) {
+            @SuppressWarnings("unchecked")
+            List<String> actions = (List<String>) raw;
             ListIterator<String> iterator = actions.listIterator();
             while (iterator.hasNext()) {
                 String action = iterator.next();
@@ -129,6 +137,24 @@ public final class SpecialComponentList {
                     iterator.set(newAction);
                 }
             }
+        } else if (raw instanceof java.util.Collection) {
+            // Android 12+ keeps the actions in an ArraySet.
+            @SuppressWarnings("unchecked")
+            java.util.Collection<String> actions = (java.util.Collection<String>) raw;
+            List<String> result = new java.util.ArrayList<>();
+            for (String action : actions) {
+                if (SpecialComponentList.isActionInBlackList(action)) {
+                    continue;
+                }
+                if (SYSTEM_BROADCAST_ACTION.contains(action)) {
+                    result.add(action);
+                    continue;
+                }
+                String newAction = SpecialComponentList.protectAction(action);
+                result.add(newAction != null ? newAction : action);
+            }
+            actions.clear();
+            actions.addAll(result);
         }
     }
 
