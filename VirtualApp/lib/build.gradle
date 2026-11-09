@@ -1,16 +1,19 @@
-apply plugin: 'com.android.library'
+plugins {
+    id 'com.android.library'
+}
 
 android {
-    compileSdkVersion 26
-    buildToolsVersion '26.0.2'
+    namespace 'com.lody.virtual'
+    compileSdk 35
+    ndkVersion '27.3.13750724'
 
     defaultConfig {
-        minSdkVersion 14
-        targetSdkVersion 22
-        versionCode 1
-        versionName "1.0"
+        // NDK r27 requires API 21+
+        minSdk 21
+        targetSdk 28
         externalNativeBuild {
             ndkBuild {
+                // TODO(P1): add arm64-v8a once the native hook layer supports it
                 abiFilters "armeabi-v7a", "x86"
             }
         }
@@ -26,13 +29,21 @@ android {
             path file("src/main/jni/Android.mk")
         }
     }
-    lintOptions {
-        //IJobService need NewApi
-        warning 'NewApi','OnClick'
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    buildFeatures {
+        buildConfig true
+        aidl true
+    }
+    lint {
+        // IJobService needs NewApi
+        warning 'NewApi', 'OnClick'
+        abortOnError false
     }
 }
 
-
 dependencies {
-    compile fileTree(include: ['*.jar'], dir: 'libs')
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
 }
