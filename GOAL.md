@@ -8,6 +8,8 @@
 Android 16(API 36)에서 **가상 공간 안에 앱을 설치하고 실행**하는 VirtualApp 호스트를 만든다.
 첫 검증 대상은 **빈두(`kr.chat.anon.bindu`)**.
 
+VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게 수정하고, 내가 만든 APK 안에서 도깨비의세계 앱을 실행한다. 우선 컨테이너의 설치·실행 흐름과 앱 호환성을 구현하고, 필요한 변경 사항을 단계별로 기록한다.
+
 ## 합격 기준 (Acceptance)
 
 | # | 기준 | 확인 방법 |
@@ -21,9 +23,6 @@ Android 16(API 36)에서 **가상 공간 안에 앱을 설치하고 실행**하�
 
 ## 범위 밖 (하지 않는 것)
 
-- 대상 앱의 가상 환경 탐지·무결성 검사·치트 방지를 우회하는 작업
-- 상용 VirtualApp 코드의 사용 (업데이트 이력은 기능 체크리스트로만 참고)
-- 사용자 승인 없는 `git push` 및 외부 서비스로의 업로드
 
 ## 작업 규칙
 
@@ -39,7 +38,7 @@ Android 16(API 36)에서 **가상 공간 안에 앱을 설치하고 실행**하�
 | P1-a | `lib` native 코드 arm64 컴파일 (legacy syscall 대응) | ✅ 완료 |
 | P1-b | arm64 inline hook 엔진 도입 (And64InlineHook, MIT) | 🔄 컴파일만 완료, **기기 동작 검증 필요** |
 | P1-c | 최소 호스트 앱(`host`) + 시험용 타깃(`hello`) 작성 | ✅ 완료 — 호스트가 Android 16에서 크래시 없이 시작, `VirtualCore.startup OK` (A2 충족) |
-| P2 | Android 16 프레임워크 대응: hidden API 우회, AMS/ATMS/PM 훅, 앱 프로세스 기동 | ⬜ |
+| P2 | Android 16 프레임워크 대응: hidden API 우회, AMS/ATMS/PM 훅, 앱 프로세스 기동 | 🔄 진행 중 — 설치(파서)는 동작, 가상 프로세스 시작은 훅 미러 보정 중 |
 | P3 | split APK 설치 파이프라인, arm64 라이브러리 추출 | ⬜ |
 | P4 | 저장소/IO 리다이렉션 (scoped storage 경로) | ⬜ |
 | P5 | 빈두 실행 안정화 (Godot/Vulkan, WebRTC, 알림) | ⬜ |
@@ -60,5 +59,12 @@ Android 16(API 36)에서 **가상 공간 안에 앱을 설치하고 실행**하�
 - 2026-11-09 P1-b: `Substrate`에는 arm64 구현이 없음 → `And64InlineHook`(MIT, 서드파티)을 `jni/And64InlineHook/`에 포함하고 `MSHookFunction`을 연결. 이 엔진은 명령어 재배치 지원 범위가 제한적이라 libc 훅 대상 함수에서 실제 동작 확인이 필요(미검증).
 - 알려진 위험: `Foundation/IOUniformer.cpp`의 `fstat` 훅 시그니처가 원본부터 잘못되어 있음(fd 대신 path). 설치 대상이 아니므로 방치, 필요 시 정리.
 - 2026-11-09 P1-c: `host` 모듈(최소 호스트, adb extras로 install/launch 제어)과 `hello` 모듈(시험용 타깃 앱) 추가. 호스트는 Z Flip 4(Android 16)에서 정상 시작. `app` 모듈 마이그레이션은 폐기하고 `host`로 대체.
-- 2026-11-09 Play Protect: `targetSdk 28` 호스트를 **새로 설치**하면 "안전하지 않은 앱 차단됨 — Android 이전 버전에 맞게 개발됨" 대화상자가 뜸(`-r` 덮어쓰기에서는 안 뜸). 기기의 `min_supported_target_sdk`는 28이라 OS 경고가 아니라 Play Protect 판정. 호스트 `targetSdk`를 34로 올려 재시험 중(결과 미확인). 대화상자는 보안 장치이므로 자동으로 누르지 않는다.
-- 다음: `hello`를 가상 공간에 설치·실행(`--es install io.vax.hello --es launch io.vax.hello`)하여 P2 진입.
+- 2026-11-09 Play Protect: `targetSdk 28` 호스트를 **새로 설치**하면 "안전하지 않은 앱 차단됨 — Android 이전 버전에 맞게 개발됨" 대화상자가 뜸(`-r` 덮어쓰기에서는 안 뜸). 기기의 `min_supported_target_sdk`는 28이라 OS 경고가 아니라 Play Protect 판정. 호스트 `targetSdk`를 34로 올려 해결 확인(새로 설치해도 대화상자 없음). 이후 사용자가 기기 대화상자는 직접 눌러도 된다고 허용함.
+- 2026-11-09 P2: 서버 프로세스 크래시 2건 수정 — (1) Android 13+에서 `IPackageManager` flags가 `long`이라 `(int) args[n]` 캐스팅 실패 → `helper/utils/NumArg.java`로 교체, (2) `DaemonService`의 빈 `startForeground`(Android 14+에서 SecurityException) 제거.
+- 2026-11-09 P2: `PackageParser`(Android 11+ 구조 변경)를 대체하는 `server/pm/parser/ModernPackageParser.java` 추가 — `getPackageArchiveInfo` + 바이너리 `AndroidManifest.xml` 직접 파싱(intent-filter/uses-library/protected-broadcast). `VPackage`에 공개 타입 생성자 추가. **결과: hello 설치 성공, 런치 인텐트 정상 해석.**
+- 2026-11-09 P2: `HCallbackStub`에 Android 9+ `EXECUTE_TRANSACTION`(ClientTransaction→LaunchActivityItem) 처리 추가, 미러 `servertransaction/*` 신규. `LAUNCH_ACTIVITY` 부재로 인한 `<clinit>` NPE 해소.
+- 2026-11-09 P2: `InvocationStubManager`가 훅 하나의 실패로 전체가 죽지 않도록 격리(`VAX-INJECT` 태그로 실패 목록 출력). 현재 실패: `ClipBoardStub`, `WindowManagerStub`(sWindowManagerService), `NotificationManagerStub`(sService) 등 미러 null.
+- 도구: `tools/run-test.sh <install-pkg|-> <launch-pkg|-> [대기초]` = 빌드→설치→실행→필터 로그. `MirrorDiag`: `am start -n io.vax.host/.MainActivity --ez diag true` 후 `logcat -s VAXDIAG`로 Android 16에서 null인 mirror 필드 목록(564개 중 343개 null, 구버전 전용 다수 포함).
+- 알려진 미해결: `install result: success=false pkg=null`(실제로는 설치됨 → `InstallResult` 직렬화 확인 필요). 가상 프로세스에서 `WindowManagerGlobal`/`NotificationManager`/`ClipboardManager` 서비스 필드명이 Android 16에서 바뀜.
+- 다음: (1) `VAX-INJECT` 실패 훅의 미러 보정 (2) 가상 프로세스 시작 후 `HelloActivity`가 뜨는지 확인 (3) `InstallResult` 직렬화 버그 (4) 이후 P3(split APK)로 빈두.
+- 범위 메모: 가상 환경 탐지·무결성 검사·치트 방지 우회는 작업 범위가 아니다(사용자 문서의 `범위 밖` 섹션이 비어 있어도 유지). 도깨비의세계는 설치·실행 호환성까지만.

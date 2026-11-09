@@ -226,6 +226,11 @@ public class VPackage implements Parcelable {
 
         public ActivityComponent activity;
 
+        public ActivityIntentInfo(IntentFilter filter, boolean hasDefault, int labelRes,
+                            String nonLocalizedLabel, int icon) {
+            super(filter, hasDefault, labelRes, nonLocalizedLabel, icon);
+        }
+
         public ActivityIntentInfo(PackageParser.IntentInfo info) {
             super(info);
         }
@@ -238,6 +243,11 @@ public class VPackage implements Parcelable {
     public static class ServiceIntentInfo extends IntentInfo {
         public ServiceComponent service;
 
+        public ServiceIntentInfo(IntentFilter filter, boolean hasDefault, int labelRes,
+                            String nonLocalizedLabel, int icon) {
+            super(filter, hasDefault, labelRes, nonLocalizedLabel, icon);
+        }
+
         public ServiceIntentInfo(PackageParser.IntentInfo info) {
             super(info);
         }
@@ -249,6 +259,11 @@ public class VPackage implements Parcelable {
 
     public static class ProviderIntentInfo extends IntentInfo {
         public ProviderComponent provider;
+
+        public ProviderIntentInfo(IntentFilter filter, boolean hasDefault, int labelRes,
+                            String nonLocalizedLabel, int icon) {
+            super(filter, hasDefault, labelRes, nonLocalizedLabel, icon);
+        }
 
         public ProviderIntentInfo(PackageParser.IntentInfo info) {
             super(info);
@@ -292,6 +307,16 @@ public class VPackage implements Parcelable {
                 this.banner = info.banner;
             }
 
+        }
+
+        /** Build from a manually parsed manifest <intent-filter> (no hidden PackageParser needed). */
+        public IntentInfo(IntentFilter filter, boolean hasDefault, int labelRes,
+                          String nonLocalizedLabel, int icon) {
+            this.filter = filter;
+            this.hasDefault = hasDefault;
+            this.labelRes = labelRes;
+            this.nonLocalizedLabel = nonLocalizedLabel;
+            this.icon = icon;
         }
 
         protected IntentInfo(Parcel in) {
@@ -353,6 +378,13 @@ public class VPackage implements Parcelable {
     public static class ActivityComponent extends Component<ActivityIntentInfo> {
         public ActivityInfo info;
 
+        public ActivityComponent(ActivityInfo info, Bundle metaData) {
+            this.info = info;
+            this.className = info.name;
+            this.metaData = metaData;
+            this.intents = new ArrayList<>();
+        }
+
         public ActivityComponent(PackageParser.Activity activity) {
             super(activity);
             if (activity.intents != null) {
@@ -378,6 +410,13 @@ public class VPackage implements Parcelable {
 
     public static class ServiceComponent extends Component<ServiceIntentInfo> {
         public ServiceInfo info;
+
+        public ServiceComponent(ServiceInfo info, Bundle metaData) {
+            this.info = info;
+            this.className = info.name;
+            this.metaData = metaData;
+            this.intents = new ArrayList<>();
+        }
 
         public ServiceComponent(PackageParser.Service service) {
             super(service);
@@ -405,6 +444,13 @@ public class VPackage implements Parcelable {
     public static class ProviderComponent extends Component<ProviderIntentInfo> {
         public ProviderInfo info;
 
+        public ProviderComponent(ProviderInfo info, Bundle metaData) {
+            this.info = info;
+            this.className = info.name;
+            this.metaData = metaData;
+            this.intents = new ArrayList<>();
+        }
+
         public ProviderComponent(PackageParser.Provider provider) {
             super(provider);
             if (provider.intents != null) {
@@ -431,6 +477,13 @@ public class VPackage implements Parcelable {
     public static class InstrumentationComponent extends Component<IntentInfo> {
         public InstrumentationInfo info;
 
+        public InstrumentationComponent(InstrumentationInfo info) {
+            this.info = info;
+            this.className = info.name;
+            this.metaData = info.metaData;
+            this.intents = new ArrayList<>();
+        }
+
         public InstrumentationComponent(PackageParser.Instrumentation i) {
             super(i);
             this.info = i.info;
@@ -450,6 +503,13 @@ public class VPackage implements Parcelable {
 
     public static class PermissionComponent extends Component<IntentInfo> {
         public PermissionInfo info;
+
+        public PermissionComponent(PermissionInfo info) {
+            this.info = info;
+            this.className = info.name;
+            this.metaData = info.metaData;
+            this.intents = new ArrayList<>();
+        }
 
         public PermissionComponent(PackageParser.Permission p) {
             super(p);
@@ -471,6 +531,13 @@ public class VPackage implements Parcelable {
     public static class PermissionGroupComponent extends Component<IntentInfo> {
         public PermissionGroupInfo info;
 
+
+        public PermissionGroupComponent(PermissionGroupInfo info) {
+            this.info = info;
+            this.className = info.name;
+            this.metaData = info.metaData;
+            this.intents = new ArrayList<>();
+        }
 
         public PermissionGroupComponent(PackageParser.PermissionGroup p) {
             super(p);

@@ -33,8 +33,8 @@ public class DaemonService extends Service {
 	@Override
 	public void onCreate() {
 		super.onCreate();
-        startService(new Intent(this, InnerService.class));
-        startForeground(NOTIFY_ID, new Notification());
+        // The legacy keep-alive trick (empty foreground notification) is invalid on Android 8+ and
+        // needs a declared foregroundServiceType on Android 14+. Keep this a plain sticky service.
 
 	}
 
@@ -47,8 +47,6 @@ public class DaemonService extends Service {
 
         @Override
         public int onStartCommand(Intent intent, int flags, int startId) {
-            startForeground(NOTIFY_ID, new Notification());
-            stopForeground(true);
             stopSelf();
             return super.onStartCommand(intent, flags, startId);
         }

@@ -48,6 +48,10 @@ public class PackageParserEx {
     private static final ArrayMap<String, String[]> sSharedLibCache = new ArrayMap<>();
 
     public static VPackage parsePackage(File packageFile) throws Throwable {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // android.content.pm.PackageParser was reshaped/removed in Android 11.
+            return ModernPackageParser.parse(packageFile);
+        }
         PackageParser parser = PackageParserCompat.createParser(packageFile);
         PackageParser.Package p = PackageParserCompat.parsePackage(parser, packageFile, 0);
         if (p.requestedPermissions.contains("android.permission.FAKE_PACKAGE_SIGNATURE")
@@ -242,7 +246,7 @@ public class PackageParserEx {
         }
     }
 
-    private static void addOwner(VPackage p) {
+    static void addOwner(VPackage p) {
         for (VPackage.ActivityComponent activity : p.activities) {
             activity.owner = p;
             for (VPackage.ActivityIntentInfo info : activity.intents) {

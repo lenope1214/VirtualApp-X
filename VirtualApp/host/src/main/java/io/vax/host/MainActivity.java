@@ -42,6 +42,9 @@ public class MainActivity extends Activity {
     }
 
     private void handle(Intent intent) {
+        if (intent.getBooleanExtra("diag", false)) {
+            new Thread(() -> MirrorDiag.run(getApplicationContext()), "vax-diag").start();
+        }
         final String install = intent.getStringExtra("install");
         final String launch = intent.getStringExtra("launch");
         if (install == null && launch == null) return;

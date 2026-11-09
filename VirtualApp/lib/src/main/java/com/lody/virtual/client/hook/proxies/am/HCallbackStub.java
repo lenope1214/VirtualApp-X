@@ -22,6 +22,8 @@ import com.lody.virtual.remote.StubActivityRecord;
 import mirror.android.app.ActivityManagerNative;
 import mirror.android.app.ActivityThread;
 import mirror.android.app.IActivityManager;
+import mirror.android.app.servertransaction.ClientTransaction;
+import mirror.android.app.servertransaction.LaunchActivityItem;
 
 /**
      * @author Lody
@@ -30,7 +32,10 @@ import mirror.android.app.IActivityManager;
     public class HCallbackStub implements Handler.Callback, IInjector {
 
 
-        private static final int LAUNCH_ACTIVITY = ActivityThread.H.LAUNCH_ACTIVITY.get();
+        private static final int LAUNCH_ACTIVITY =
+                ActivityThread.H.LAUNCH_ACTIVITY != null ? ActivityThread.H.LAUNCH_ACTIVITY.get() : -1;
+        private static final int EXECUTE_TRANSACTION =
+                ActivityThread.H.EXECUTE_TRANSACTION != null ? ActivityThread.H.EXECUTE_TRANSACTION.get() : -1;
         private static final int CREATE_SERVICE = ActivityThread.H.CREATE_SERVICE.get();
         private static final int SCHEDULE_CRASH =
                 ActivityThread.H.SCHEDULE_CRASH != null ? ActivityThread.H.SCHEDULE_CRASH.get() : -1;
@@ -73,6 +78,10 @@ import mirror.android.app.IActivityManager;
                         if (!handleLaunchActivity(msg)) {
                             return true;
                         }
+                    } else if (EXECUTE_TRANSACTION == msg.what) {
+                        if (!handleExecuteTransaction(msg)) {
+                            return true;
+                        }
                     } else if (CREATE_SERVICE == msg.what) {
                         if (!VClientImpl.get().isBound()) {
                             ServiceInfo info = Reflect.on(msg.obj).get("info");
@@ -94,6 +103,73 @@ import mirror.android.app.IActivityManager;
                 }
             }
             return false;
+        }
+
+        /**
+         * Android 9+: the system asks the process to start an activity with a ClientTransaction
+         * whose callbacks contain a LaunchActivityItem. Swap the stub intent/info for the real one.
+         *
+         * @return false when the message was re-queued (process not bound yet) and must be dropped now.
+         */
+        private boolean handleExecuteTransaction(Message msg) {
+            Object transaction = msg.obj;
+            if (transaction == null || ClientTransaction.mActivityCallbacks == null) {
+                return true;
+            }
+            java.util.List<Object> callbacks = ClientTransaction.mActivityCallbacks.get(transaction);
+            if (callbacks == null) {
+                return true;
+            }
+            for (Object item : callbacks) {
+                if (item == null || LaunchActivityItem.TYPE == null
+                        || !LaunchActivityItem.TYPE.isInstance(item)) {
+                    continue;
+                }
+                Intent stubIntent = LaunchActivityItem.mIntent.get(item);
+                StubActivityRecord saveInstance = new StubActivityRecord(stubIntent);
+                if (saveInstance.intent == null) {
+                    continue; // not one of ours
+                }
+                Intent intent = saveInstance.intent;
+                ComponentName caller = saveInstance.caller;
+                ActivityInfo info = saveInstance.info;
+                IBinder token = null;
+                if (ClientTransaction.mActivityToken != null) {
+                    token = ClientTransaction.mActivityToken.get(transaction);
+                }
+                if (token == null && ClientTransaction.mClient != null) {
+                    token = ClientTransaction.mClient.get(transaction);
+                }
+                if (VClientImpl.get().getToken() == null) {
+                    InstalledAppInfo installedAppInfo =
+                            VirtualCore.get().getInstalledAppInfo(info.packageName, 0);
+                    if (installedAppInfo == null) {
+                        return true;
+                    }
+                    VActivityManager.get().processRestarted(info.packageName, info.processName, saveInstance.userId);
+                    getH().sendMessageAtFrontOfQueue(Message.obtain(msg));
+                    return false;
+                }
+                if (!VClientImpl.get().isBound()) {
+                    VClientImpl.get().bindApplication(info.packageName, info.processName);
+                    getH().sendMessageAtFrontOfQueue(Message.obtain(msg));
+                    return false;
+                }
+                int taskId = -1;
+                try {
+                    taskId = IActivityManager.getTaskForActivity.call(
+                            ActivityManagerNative.getDefault.call(), token, false);
+                } catch (Throwable e) {
+                    VLog.w(TAG, "getTaskForActivity unavailable: " + e);
+                }
+                VActivityManager.get().onActivityCreate(ComponentUtils.toComponentName(info), caller, token,
+                        info, intent, ComponentUtils.getTaskAffinity(info), taskId, info.launchMode, info.flags);
+                ClassLoader appClassLoader = VClientImpl.get().getClassLoader(info.applicationInfo);
+                intent.setExtrasClassLoader(appClassLoader);
+                LaunchActivityItem.mIntent.set(item, intent);
+                LaunchActivityItem.mInfo.set(item, info);
+            }
+            return true;
         }
 
         private boolean handleLaunchActivity(Message msg) {

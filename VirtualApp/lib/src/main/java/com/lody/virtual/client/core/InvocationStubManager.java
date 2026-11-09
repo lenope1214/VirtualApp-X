@@ -84,7 +84,12 @@ public final class InvocationStubManager {
 
 	void injectAll() throws Throwable {
 		for (IInjector injector : mInjectors.values()) {
-			injector.inject();
+			try {
+				injector.inject();
+			} catch (Throwable e) {
+				// One broken hook must not take the whole process down; report it and go on.
+				android.util.Log.e("VAX-INJECT", "inject failed: " + injector.getClass().getSimpleName(), e);
+			}
 		}
 		// XXX: Lazy inject the Instrumentation,
 		addInjector(AppInstrumentation.getDefault());
@@ -112,77 +117,89 @@ public final class InvocationStubManager {
 			return;
 		}
 		if (VirtualCore.get().isServerProcess()) {
-			addInjector(new ActivityManagerStub());
-			addInjector(new PackageManagerStub());
+			addInjectorSafe("ActivityManagerStub", () -> new ActivityManagerStub());
+			addInjectorSafe("PackageManagerStub", () -> new PackageManagerStub());
 			return;
 		}
 		if (VirtualCore.get().isVAppProcess()) {
-			addInjector(new LibCoreStub());
-			addInjector(new ActivityManagerStub());
-			addInjector(new PackageManagerStub());
+			addInjectorSafe("LibCoreStub", () -> new LibCoreStub());
+			addInjectorSafe("ActivityManagerStub", () -> new ActivityManagerStub());
+			addInjectorSafe("PackageManagerStub", () -> new PackageManagerStub());
 			addInjector(HCallbackStub.getDefault());
-			addInjector(new ISmsStub());
-			addInjector(new ISubStub());
-			addInjector(new DropBoxManagerStub());
-			addInjector(new NotificationManagerStub());
-			addInjector(new LocationManagerStub());
-			addInjector(new WindowManagerStub());
-			addInjector(new ClipBoardStub());
-			addInjector(new MountServiceStub());
-			addInjector(new BackupManagerStub());
-			addInjector(new TelephonyStub());
-			addInjector(new TelephonyRegistryStub());
-			addInjector(new PhoneSubInfoStub());
-			addInjector(new PowerManagerStub());
-			addInjector(new AppWidgetManagerStub());
-			addInjector(new AccountManagerStub());
-			addInjector(new AudioManagerStub());
-			addInjector(new SearchManagerStub());
-			addInjector(new ContentServiceStub());
-			addInjector(new ConnectivityStub());
+			addInjectorSafe("ISmsStub", () -> new ISmsStub());
+			addInjectorSafe("ISubStub", () -> new ISubStub());
+			addInjectorSafe("DropBoxManagerStub", () -> new DropBoxManagerStub());
+			addInjectorSafe("NotificationManagerStub", () -> new NotificationManagerStub());
+			addInjectorSafe("LocationManagerStub", () -> new LocationManagerStub());
+			addInjectorSafe("WindowManagerStub", () -> new WindowManagerStub());
+			addInjectorSafe("ClipBoardStub", () -> new ClipBoardStub());
+			addInjectorSafe("MountServiceStub", () -> new MountServiceStub());
+			addInjectorSafe("BackupManagerStub", () -> new BackupManagerStub());
+			addInjectorSafe("TelephonyStub", () -> new TelephonyStub());
+			addInjectorSafe("TelephonyRegistryStub", () -> new TelephonyRegistryStub());
+			addInjectorSafe("PhoneSubInfoStub", () -> new PhoneSubInfoStub());
+			addInjectorSafe("PowerManagerStub", () -> new PowerManagerStub());
+			addInjectorSafe("AppWidgetManagerStub", () -> new AppWidgetManagerStub());
+			addInjectorSafe("AccountManagerStub", () -> new AccountManagerStub());
+			addInjectorSafe("AudioManagerStub", () -> new AudioManagerStub());
+			addInjectorSafe("SearchManagerStub", () -> new SearchManagerStub());
+			addInjectorSafe("ContentServiceStub", () -> new ContentServiceStub());
+			addInjectorSafe("ConnectivityStub", () -> new ConnectivityStub());
 
 			if (Build.VERSION.SDK_INT >= JELLY_BEAN_MR2) {
-				addInjector(new VibratorStub());
-				addInjector(new WifiManagerStub());
-				addInjector(new BluetoothStub());
-				addInjector(new ContextHubServiceStub());
+				addInjectorSafe("VibratorStub", () -> new VibratorStub());
+				addInjectorSafe("WifiManagerStub", () -> new WifiManagerStub());
+				addInjectorSafe("BluetoothStub", () -> new BluetoothStub());
+				addInjectorSafe("ContextHubServiceStub", () -> new ContextHubServiceStub());
 			}
 			if (Build.VERSION.SDK_INT >= JELLY_BEAN_MR1) {
-				addInjector(new UserManagerStub());
+				addInjectorSafe("UserManagerStub", () -> new UserManagerStub());
 			}
 
 			if (Build.VERSION.SDK_INT >= JELLY_BEAN_MR1) {
-				addInjector(new DisplayStub());
+				addInjectorSafe("DisplayStub", () -> new DisplayStub());
 			}
 			if (Build.VERSION.SDK_INT >= LOLLIPOP) {
-				addInjector(new PersistentDataBlockServiceStub());
-				addInjector(new InputMethodManagerStub());
-				addInjector(new MmsStub());
-				addInjector(new SessionManagerStub());
-				addInjector(new JobServiceStub());
-				addInjector(new RestrictionStub());
+				addInjectorSafe("PersistentDataBlockServiceStub", () -> new PersistentDataBlockServiceStub());
+				addInjectorSafe("InputMethodManagerStub", () -> new InputMethodManagerStub());
+				addInjectorSafe("MmsStub", () -> new MmsStub());
+				addInjectorSafe("SessionManagerStub", () -> new SessionManagerStub());
+				addInjectorSafe("JobServiceStub", () -> new JobServiceStub());
+				addInjectorSafe("RestrictionStub", () -> new RestrictionStub());
 			}
 			if (Build.VERSION.SDK_INT >= KITKAT) {
-				addInjector(new AlarmManagerStub());
-				addInjector(new AppOpsManagerStub());
-				addInjector(new MediaRouterServiceStub());
+				addInjectorSafe("AlarmManagerStub", () -> new AlarmManagerStub());
+				addInjectorSafe("AppOpsManagerStub", () -> new AppOpsManagerStub());
+				addInjectorSafe("MediaRouterServiceStub", () -> new MediaRouterServiceStub());
 			}
 			if (Build.VERSION.SDK_INT >= LOLLIPOP_MR1) {
-				addInjector(new GraphicsStatsStub());
-				addInjector(new UsageStatsManagerStub());
+				addInjectorSafe("GraphicsStatsStub", () -> new GraphicsStatsStub());
+				addInjectorSafe("UsageStatsManagerStub", () -> new UsageStatsManagerStub());
 			}
 			if (Build.VERSION.SDK_INT >= M) {
-				addInjector(new FingerprintManagerStub());
-				addInjector(new NetworkManagementStub());
+				addInjectorSafe("FingerprintManagerStub", () -> new FingerprintManagerStub());
+				addInjectorSafe("NetworkManagementStub", () -> new NetworkManagementStub());
 			}
 			if (Build.VERSION.SDK_INT >= N) {
-                addInjector(new WifiScannerStub());
-                addInjector(new ShortcutServiceStub());
-                addInjector(new DevicePolicyManagerStub());
+                addInjectorSafe("WifiScannerStub", () -> new WifiScannerStub());
+                addInjectorSafe("ShortcutServiceStub", () -> new ShortcutServiceStub());
+                addInjectorSafe("DevicePolicyManagerStub", () -> new DevicePolicyManagerStub());
             }
             if (Build.VERSION.SDK_INT >= 26) {
-				addInjector(new AutoFillManagerStub());
+				addInjectorSafe("AutoFillManagerStub", () -> new AutoFillManagerStub());
 			}
+		}
+	}
+
+	private interface InjectorFactory {
+		IInjector create() throws Throwable;
+	}
+
+	private void addInjectorSafe(String name, InjectorFactory factory) {
+		try {
+			addInjector(factory.create());
+		} catch (Throwable e) {
+			android.util.Log.e("VAX-INJECT", "skip " + name + ": " + e);
 		}
 	}
 
