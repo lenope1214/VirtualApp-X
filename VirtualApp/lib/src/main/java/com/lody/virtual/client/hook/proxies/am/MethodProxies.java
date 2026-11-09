@@ -1211,16 +1211,10 @@ class MethodProxies {
 
 
     static class RegisterReceiver extends MethodProxy {
-        private static final int IDX_IIntentReceiver = Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1
-                ? 2
-                : 1;
-
-        private static final int IDX_RequiredPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1
-                ? 4
-                : 3;
-        private static final int IDX_IntentFilter = Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1
-                ? 3
-                : 2;
+        // Argument positions; RegisterReceiverWithFeature (Android 11+) overrides them.
+        int IDX_IIntentReceiver = 2;
+        int IDX_RequiredPermission = 4;
+        int IDX_IntentFilter = 3;
 
         private WeakHashMap<IBinder, IIntentReceiver> mProxyIIntentReceivers = new WeakHashMap<>();
 
@@ -1345,6 +1339,23 @@ class MethodProxies {
         }
     }
 
+
+    /**
+     * Android 11+: registerReceiverWithFeature(caller, callerPackage, callerFeatureId, receiverId,
+     * receiver, filter, requiredPermission, userId, flags).
+     */
+    static class RegisterReceiverWithFeature extends RegisterReceiver {
+        RegisterReceiverWithFeature() {
+            IDX_IIntentReceiver = 4;
+            IDX_IntentFilter = 5;
+            IDX_RequiredPermission = 6;
+        }
+
+        @Override
+        public String getMethodName() {
+            return "registerReceiverWithFeature";
+        }
+    }
 
     static class GetContentProvider extends MethodProxy {
 
