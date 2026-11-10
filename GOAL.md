@@ -41,6 +41,7 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
 | P2 | Android 16 프레임워크 대응: hidden API 우회, AMS/ATMS/PM 훅, 앱 프로세스 기동 | ✅ 완료 — hello가 가상 프로세스(uid 10001, 데이터 `virtual/` 하위)에서 화면까지 뜸 |
 | P3 | split APK 설치 파이프라인, arm64 라이브러리 추출 | ✅ 완료 — 빈두 base+split 4개 설치, arm64 .so 3개 추출 (A3 충족) |
 | P4 | 저장소/IO 리다이렉션 (scoped storage 경로) | ⬜ |
+| P4.5 | PendingIntent/bindService 패키지 스푸핑 훅 (Android 11+ `bindServiceInstance`/`getIntentSenderWithFeature`) | ✅ 완료 |
 | P5 | 빈두 실행 안정화 (Godot/Vulkan, WebRTC, 알림) | ⬜ |
 | P6 | (필요 시) Google 서비스 | ⬜ |
 
@@ -90,4 +91,9 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
   3. `IntentInterceptor.java`: `https://kauth.kakao.com/` 대상 `ACTION_VIEW` 인텐트 가로채기, 쿼리/엑스트라 파싱 및 OAuth 리디렉션 제어 인터셉터.
   4. `liapp_frida_agent.js`: `com.xshield.da`, `LiappAgentforUnity`, `UnitySendMessage` 무결성 검증 메서드를 인터셉트하여 정상 반환값(`0`/빈 값) 강제 주입 및 차단 통보 무력화 Frida Agent.
   5. `proc_mem_tool.c`: `/proc/<pid>/mem` 및 `/proc/<pid>/maps` 파싱 기반 메모리 패턴 스캐너 및 패처 (SIGSEGV/SIGBUS 보호 내장).
+- 2026-11-10 **P4.5 완료 — PendingIntent/bindService 패키지 스푸핑 훅 (샌드박스 호환성, 모든 앱 공통)**:
+  - 증상: 샌드박스 게스트에서 `getIntentSender() ... is not allowed to send as package`(WorkManager PendingIntent)와 `Not allowed to bind to service`(Firebase SessionLifecycleService, GMS AppMeasurementService) SecurityException 반복.
+  - 근본 원인: `MethodInvocationStub.invoke()`는 **실제 호출된 메서드명**으로 프록시를 찾는데(기존 프록시명이 안 맞으면 그대로 실제 AMS로 통과), Android 11+/삼성 One UI는 레거시와 다른 메서드를 호출. (1) `bindService` → `bindServiceInstance`(API 31+)/`bindIsolatedService`(API 29-30), (2) `getIntentSender` → `getIntentSenderWithFeature`(featureId가 index 2에 삽입되어 이후 인자 +1 시프트).
+  - 수정(`MethodProxies.java`): `BindService`를 상속한 `BindServiceInstance`/`BindIsolatedService` 별칭 추가(선행 인자 배치 동일), `getIntentSenderWithFeature` 전용 프록시 추가(시프트된 인덱스로 pkg→호스트 치환·intents 리다이렉트), `GetIntentSender`에 게스트 패키지와 같은 문자열 인자를 호스트로 바꾸는 방어적 치환 추가(ROM별 인자 위치 차이 대비). `@Inject(MethodProxies.class)`가 서브클래스까지 자동 등록.
+  - 검증: 기기(SM-F721N, Android 16) 도깨비 실행 로그에서 `not allowed to send as package` 0건, `Not allowed to bind to service` 0건(수정 전 각각 37/수 건). CNF(패커)와는 무관한 호환성 수정이며 도깨비를 포함한 모든 게스트 앱에 공통 적용.
 

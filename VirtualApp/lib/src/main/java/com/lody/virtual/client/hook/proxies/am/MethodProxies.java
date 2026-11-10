@@ -313,6 +313,17 @@ class MethodProxies {
             }
             args[7] = flags;
             args[1] = getHostPkg();
+            // Some ROMs (e.g. Samsung One UI) carry the creator package in a slot other than
+            // args[1]; defensively rewrite every arg still equal to the guest package so the real
+            // AMS sees the host package it actually owns (fixes "not allowed to send as package").
+            String appPkg = getAppPkg();
+            if (appPkg != null) {
+                for (int i = 0; i < args.length; i++) {
+                    if (args[i] instanceof String && appPkg.equals(args[i])) {
+                        args[i] = getHostPkg();
+                    }
+                }
+            }
             // Force userId to 0
             if (args[args.length - 1] instanceof Integer) {
                 args[args.length - 1] = 0;
@@ -324,7 +335,7 @@ class MethodProxies {
             return sender;
         }
 
-        private Intent redirectIntentSender(int type, String creator, Intent intent) {
+        Intent redirectIntentSender(int type, String creator, Intent intent) {
             Intent newIntent = intent.cloneFilter();
             switch (type) {
                 case ActivityManagerCompat.INTENT_SENDER_ACTIVITY: {
@@ -361,6 +372,61 @@ class MethodProxies {
             return isAppProcess();
         }
 
+    }
+
+
+    /**
+     * Android 11+ (and Samsung One UI) route PendingIntent creation through
+     * IActivityManager#getIntentSenderWithFeature, which inserts a featureId/attributionTag String
+     * at index 2 and shifts every following argument by one relative to #getIntentSender. The legacy
+     * GetIntentSender proxy name never matched, so the call passed through to the real AMS with the
+     * guest package -> "not allowed to send as package". Layout:
+     * [0]type [1]pkg [2]featureId [3]token [4]resultWho [5]requestCode [6]intents [7]resolvedTypes
+     * [8]flags [9]options [10]userId.
+     */
+    static class GetIntentSenderWithFeature extends GetIntentSender {
+
+        @Override
+        public String getMethodName() {
+            return "getIntentSenderWithFeature";
+        }
+
+        @Override
+        public Object call(Object who, Method method, Object... args) throws Throwable {
+            int type = (int) args[0];
+            String creator = (String) args[1];
+            String[] resolvedTypes = args[7] instanceof String[] ? (String[]) args[7] : null;
+            if (args[6] instanceof Intent[]) {
+                Intent[] intents = (Intent[]) args[6];
+                for (int i = 0; i < intents.length; i++) {
+                    Intent intent = intents[i];
+                    if (resolvedTypes != null && i < resolvedTypes.length) {
+                        intent.setDataAndType(intent.getData(), resolvedTypes[i]);
+                    }
+                    Intent targetIntent = redirectIntentSender(type, creator, intent);
+                    if (targetIntent != null) {
+                        intents[i] = targetIntent;
+                    }
+                }
+            }
+            args[1] = getHostPkg();
+            String appPkg = getAppPkg();
+            if (appPkg != null) {
+                for (int i = 0; i < args.length; i++) {
+                    if (args[i] instanceof String && appPkg.equals(args[i])) {
+                        args[i] = getHostPkg();
+                    }
+                }
+            }
+            if (args[args.length - 1] instanceof Integer) {
+                args[args.length - 1] = 0;
+            }
+            IInterface sender = (IInterface) method.invoke(who, args);
+            if (sender != null && creator != null) {
+                VActivityManager.get().addPendingIntent(sender.asBinder(), creator);
+            }
+            return sender;
+        }
     }
 
 
@@ -884,6 +950,32 @@ class MethodProxies {
         @Override
         public boolean isEnable() {
             return isAppProcess() || isServerProcess();
+        }
+    }
+
+
+    /**
+     * Android 12+ (API 31+) routes Context.bindService through IActivityManager#bindServiceInstance,
+     * not #bindService, so the legacy BindService proxy never matched and guest service binds fell
+     * through to the real AMS with the guest package -> SecurityException ("Not allowed to bind").
+     * The leading args (caller, token, service, resolvedType, connection, flags) are identical, so
+     * BindService's logic applies unchanged; only the method name differs.
+     */
+    static class BindServiceInstance extends BindService {
+        @Override
+        public String getMethodName() {
+            return "bindServiceInstance";
+        }
+    }
+
+    /**
+     * Android 10-11 (API 29-30) uses IActivityManager#bindIsolatedService with the same leading
+     * argument layout.
+     */
+    static class BindIsolatedService extends BindService {
+        @Override
+        public String getMethodName() {
+            return "bindIsolatedService";
         }
     }
 
