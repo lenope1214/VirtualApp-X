@@ -1,4 +1,4 @@
-package io.virtualapp.delegate;
+package io.vax.host;
 
 import android.content.Context;
 import android.os.Build;
@@ -25,7 +25,7 @@ import dalvik.system.DexClassLoader;
  * ponytail: 네이티브 인라인 후킹(com.xshield.da / libyfbyaux.so 메서드 교체)과 기기 실검증은 미구현.
  *           DEX 섀도잉으로 막히면 jni/HookZz·And64InlineHook 경로가 다음 단계.
  */
-final class DexPatcher {
+public final class DexPatcher {
 
     private static final String TAG = "VAX-DexPatcher";
     private static final String PATCH_DEX = "liapp-y.dex";
@@ -33,7 +33,7 @@ final class DexPatcher {
     private DexPatcher() {}
 
     /** 배포된 패치 DEX가 있으면 주입. 없거나 실패해도 앱 부팅은 그대로 진행(throw 안 함). */
-    static void injectIfPresent(Context context) {
+    public static void injectIfPresent(Context context) {
         if (context == null) return;
         try {
             File dexFile = new File(context.getCodeCacheDir(), PATCH_DEX);

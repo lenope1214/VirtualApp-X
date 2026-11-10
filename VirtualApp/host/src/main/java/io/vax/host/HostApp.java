@@ -1,10 +1,13 @@
 package io.vax.host;
 
+import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.content.Intent;
 import android.util.Log;
 
 import com.lody.virtual.client.core.VirtualCore;
+import com.lody.virtual.client.hook.delegate.ComponentDelegate;
 import com.lody.virtual.client.stub.VASettings;
 
 public class HostApp extends Application {
@@ -36,6 +39,54 @@ public class HostApp extends Application {
                 @Override
                 public void onVirtualProcess() {
                     Log.i(TAG, "onVirtualProcess");
+                    // 게스트 프로세스 전용 콜백(VClientImpl.bindApplicationNoCheck보다 먼저 실행).
+                    // 여기서 등록해야 beforeApplicationCreate(게스트 Application.onCreate 직전)가 걸림.
+                    VirtualCore.get().setComponentDelegate(new ComponentDelegate() {
+                        @Override
+                        public void beforeApplicationCreate(Application application) {
+                            DexPatcher.injectIfPresent(application);
+                        }
+
+                        @Override
+                        public void afterApplicationCreate(Application application) {
+                        }
+
+                        @Override
+                        public void beforeActivityCreate(Activity activity) {
+                        }
+
+                        @Override
+                        public void beforeActivityResume(Activity activity) {
+                        }
+
+                        @Override
+                        public void beforeActivityPause(Activity activity) {
+                        }
+
+                        @Override
+                        public void beforeActivityDestroy(Activity activity) {
+                        }
+
+                        @Override
+                        public void afterActivityCreate(Activity activity) {
+                        }
+
+                        @Override
+                        public void afterActivityResume(Activity activity) {
+                        }
+
+                        @Override
+                        public void afterActivityPause(Activity activity) {
+                        }
+
+                        @Override
+                        public void afterActivityDestroy(Activity activity) {
+                        }
+
+                        @Override
+                        public void onSendBroadcast(Intent intent) {
+                        }
+                    });
                 }
 
                 @Override
