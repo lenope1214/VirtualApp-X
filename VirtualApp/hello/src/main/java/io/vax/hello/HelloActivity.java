@@ -44,6 +44,14 @@ public class HelloActivity extends Activity {
         // (verify via `run-as io.vax.host`); if not, the write fails or hits the real path.
         info += probe("/data/data/io.vax.hello/vax_io_abs_probe.txt");
         info += probe("/sdcard/vax_io_sdcard_probe.txt");
+        // statfs probe: libcore Os.statvfs -> bionic statvfs -> statfs. An absolute path the guest
+        // does not own on the real fs succeeds only if statfs is redirected into the virtual tree.
+        try {
+            android.system.StructStatVfs st = android.system.Os.statvfs("/data/data/io.vax.hello");
+            info += "\nstatvfs /data/data/io.vax.hello -> ok blocks=" + st.f_blocks;
+        } catch (Throwable t) {
+            info += "\nstatvfs /data/data/io.vax.hello -> FAILED " + t;
+        }
         Log.i("HELLO", info.replace('\n', ' '));
         TextView tv = new TextView(this);
         tv.setTextSize(18);

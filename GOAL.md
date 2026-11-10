@@ -123,4 +123,9 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
   - 검증(수정 후, 최종 빌드): `/data/data/io.vax.hello/vax_io_abs_probe.txt` 쓰기 성공 → 호스트 `virtual/data/user/0/io.vax.hello/vax_io_abs_probe.txt`에 존재. hello FATAL 0, SIGSEGV 0. 도깨비 회귀: FATAL 3건 모두 기존 `DokkaebiUnityActivity` CNF, SIGSEGV 0, 금지 경고 0, 신규 ENOENT/EACCES 없음.
   - 해석 주의: `/sdcard` `EPERM`은 리다이렉트 실패가 아니라 권한 없는 게스트 uid의 scoped storage 정책이며, VA는 가상 스토리지를 켜지 않으면 `/sdcard`를 리다이렉트하지 않음(기본 동작). 격리 검증 기준은 `/data/data` 경로.
   - 남은 항목: `statfs`/`getcwd`도 미노출 심볼이라 훅 미설치(백로그). ELF64 심볼 파서(`linker64` 파싱 오류)는 별도.
+- 2026-11-10 **statfs 리다이렉트 복구 (`IOUniformer.cpp`), getcwd는 미적용**:
+  - 확인: 실기 libc(`/apex/com.android.runtime/lib64/bionic/libc.so`) 공개 심볼 조사(`llvm-nm -D`). `statfs`/`statfs64`는 **같은 주소의 공개 alias**, `getcwd`는 공개, `__statfs`/`__statfs64`/`__getcwd`는 비공개(dlsym NULL).
+  - 적용: 훅 대상을 공개 `statfs`로 교체(시그니처 `(path, buf)` 동일, `syscall(__NR_statfs)`로 리다이렉트). `statfs64`는 `statfs`와 같은 주소라 별도 훅하면 이중 패치 위험이라 제외. 죽은 `__statfs64`/`__getcwd` 정의와 등록 제거.
+  - `getcwd` 미적용 이유: 기존 `__getcwd` 훅은 리다이렉트를 전혀 하지 않는 빈 스텁이었음. 공개 심볼에 같은 스텁을 걸어도 효과가 없고, 실제 리다이렉트하려면 반환 경로를 역변환(`reverse_relocate`)해야 해서 앱이 보는 cwd가 바뀌는 위험이 있음 → 설계 결정으로 보류.
+  - 검증: hello에 `Os.statvfs("/data/data/io.vax.hello")` 프로브 추가. 수정 전 `ENOENT`(실재하지 않는 실제 경로) → 수정 후 `ok blocks=120507891`(샌드박스 경로로 리다이렉트). hello FATAL 0 / SIGSEGV 0. 도깨비 회귀: FATAL 3건 모두 기존 CNF, SIGSEGV 0, 금지 경고 0, statfs/getcwd 관련 오류 0.
 

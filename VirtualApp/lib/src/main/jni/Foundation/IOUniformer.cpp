@@ -408,14 +408,6 @@ HOOK_DEF(ssize_t, readlink, const char *pathname, char *buf, size_t bufsiz) {
 }
 
 
-// int __statfs64(const char *path, size_t size, struct statfs *stat);
-HOOK_DEF(int, __statfs64, const char *pathname, size_t size, struct statfs *stat) {
-    int res;
-    const char *redirect_path = relocate_path(pathname, &res);
-    int ret = syscall(__NR_statfs64, redirect_path, size, stat);
-    FREE(redirect_path, pathname);
-    return ret;
-}
 
 
 // int truncate(const char *path, off_t length);
@@ -451,14 +443,6 @@ HOOK_DEF(int, chdir, const char *pathname) {
 }
 
 
-// int __getcwd(char *buf, size_t size);
-HOOK_DEF(int, __getcwd, char *buf, size_t size) {
-    int ret = syscall(__NR_getcwd, buf, size);
-    if (!ret) {
-
-    }
-    return ret;
-}
 
 
 // int __openat(int fd, const char *pathname, int flags, int mode);
@@ -495,8 +479,8 @@ HOOK_DEF(int, __open, const char *pathname, int flags, int mode) {
     return ret;
 }
 
-// int __statfs (__const char *__file, struct statfs *__buf);
-HOOK_DEF(int, __statfs, __const char *__file, struct statfs *__buf) {
+// int statfs(const char *path, struct statfs *buf);  (exported; statfs64 is an alias of it on LP64)
+HOOK_DEF(int, statfs, __const char *__file, struct statfs *__buf) {
     int res;
     const char *redirect_path = relocate_path(__file, &res);
     int ret = syscall(__NR_statfs, redirect_path, __buf);
@@ -696,8 +680,7 @@ void IOUniformer::startUniformer(const char *so_path, int api_level, int preview
         HOOK_SYMBOL(handle, fchownat);
         HOOK_SYMBOL(handle, renameat);
         HOOK_SYMBOL(handle, fstatat64);
-        HOOK_SYMBOL(handle, __statfs);
-        HOOK_SYMBOL(handle, __statfs64);
+        HOOK_SYMBOL(handle, statfs);
         HOOK_SYMBOL(handle, mkdirat);
         HOOK_SYMBOL(handle, mknodat);
         HOOK_SYMBOL(handle, truncate);
@@ -706,7 +689,6 @@ void IOUniformer::startUniformer(const char *so_path, int api_level, int preview
         HOOK_SYMBOL(handle, unlinkat);
         HOOK_SYMBOL(handle, symlinkat);
         HOOK_SYMBOL(handle, utimensat);
-        HOOK_SYMBOL(handle, __getcwd);
 //        HOOK_SYMBOL(handle, __getdents64);
         HOOK_SYMBOL(handle, chdir);
         HOOK_SYMBOL(handle, execve);
