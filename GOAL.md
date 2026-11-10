@@ -134,4 +134,10 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
   - 수정: API 24+에서 `do_dlopen` 조회 대신 `dlsym(RTLD_DEFAULT, "dlopen")`에 기존 `new_dlopen` 훅을 설치. 기존 `dlopen` 훅은 경로만 리다이렉트하고 `onSoLoaded`는 빈 함수라 부작용 없음. API 19–23 분기는 그대로.
   - 검증: `cannot read symbol table` / `Error ELF parsing ...linker64` / `elf error 2` 각 7 → 0. `VAX-IO dlopen hook installed` 7 프로세스. 도깨비 실행 FATAL 1건(기존 CNF만), SIGSEGV 0, 금지 경고 0.
   - 한계(정직하게): 이 훅은 `dlopen()` 직접 호출만 잡음. ART의 `System.loadLibrary`가 쓰는 `android_dlopen_ext`는 훅 대상이 아님(VA가 nativeLibraryDir 절대경로로 넘기므로 현 상황에선 충분하다고 판단). 게스트 `dlopen` 절대경로 리다이렉트의 **기능 검증은 아직 테스트 경로가 없어 미완**.
+- 2026-11-10 **게스트 dlopen 리다이렉트 기능 검증 (hello 네이티브 프로브 추가)**:
+  - 테스트 경로 구성: `hello`에 작은 네이티브 `.so`(`libvaxprobe`, `probe.c`가 `dlopen()` 직접 호출)를 ndk-build로 추가. Java `System.load`는 `android_dlopen_ext`를 쓰므로 `dlopen` 훅 검증용으로 부적합 → JNI에서 실제 `dlopen()`을 부르는 프로브 사용.
+  - 절차: `libz.so`를 호스트 `run-as`로 게스트의 리다이렉트 대상 디렉터리에만 두고(0444), 게스트에서 절대경로 `/data/data/io.vax.hello/lib/libz.so`를 `dlopen`.
+  - 결과: 수정 전 파일을 app 디렉터리에 뒀을 때 실패 로그가 리다이렉트된 경로를 그대로 보여줌(`library "/data/user/0/io.vax.host/virtual/data/user/0/io.vax.hello/lib/libz.so" not found`) → **훅이 절대경로를 샌드박스로 재작성함을 확인**. 파일을 실제 리다이렉트 대상(`virtual/data/user/0/io.vax.hello/lib/`)에 두자 `dlopen -> ok`. hello FATAL 0 / SIGSEGV 0.
+  - 부수 확인: `System.loadLibrary("vaxprobe")`가 샌드박스에서 정상 로드됨 → ART가 `nativeLibraryDir`(VA가 샌드박스 절대경로로 설정)로 해석하므로 **`android_dlopen_ext` 훅은 기능상 불필요**(앱이 직접 절대경로로 `android_dlopen_ext`를 호출하는 드문 경우만 미대응).
+  - 관찰(후속 과제): `relocate_path`가 가장 먼저 등록된 규칙을 쓰는 듯 — `/data/data/<pkg>/lib/`(앱 lib 디렉터리)보다 넓은 `/data/data/<pkg>`(dataDir) 규칙이 먼저 매칭됨. 현 테스트에선 dataDir/lib에 파일을 둬 통과했으나, 접두사 최장일치가 아니면 lib 전용 리다이렉트가 무시될 수 있음 → 백로그.
 

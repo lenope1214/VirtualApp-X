@@ -11,6 +11,13 @@ import java.io.FileOutputStream;
 
 public class HelloActivity extends Activity {
 
+    static {
+        System.loadLibrary("vaxprobe");
+    }
+
+    /** Native dlopen() probe (probe.c): returns "ok" or the dlerror() text. */
+    static native String nativeDlopen(String path);
+
     /** Writes "vax-io" to an absolute path and reports whether it succeeded and exists after. */
     private static String probe(String path) {
         try {
@@ -52,6 +59,10 @@ public class HelloActivity extends Activity {
         } catch (Throwable t) {
             info += "\nstatvfs /data/data/io.vax.hello -> FAILED " + t;
         }
+        // dlopen redirect probe: libz.so is placed only in the host's virtual lib dir for this
+        // package. Real /data/data/<pkg>/lib/ does not exist, so success means the exported dlopen
+        // hook redirected the absolute path into the sandbox.
+        info += "\ndlopen /data/data/io.vax.hello/lib/libz.so -> " + nativeDlopen("/data/data/io.vax.hello/lib/libz.so");
         Log.i("HELLO", info.replace('\n', ' '));
         TextView tv = new TextView(this);
         tv.setTextSize(18);
