@@ -18,6 +18,40 @@ public class HelloActivity extends Activity {
     /** Native dlopen() probe (probe.c): returns "ok" or the dlerror() text. */
     static native String nativeDlopen(String path);
 
+    /** Reads a (small) proc file via libc-backed FileInputStream so IOUniformer hooks apply. */
+    private static String readProc(String path) {
+        try (java.io.FileInputStream in = new java.io.FileInputStream(path)) {
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n, cap = 0;
+            while ((n = in.read(buf)) > 0 && cap < 1 << 20) { bos.write(buf, 0, n); cap += n; }
+            return new String(bos.toByteArray());
+        } catch (Throwable t) {
+            return "READ-FAIL:" + t.getClass().getSimpleName();
+        }
+    }
+
+    /** Verifies the sandbox-transparency proc filtering from inside the guest. */
+    private static String procSummary() {
+        StringBuilder sb = new StringBuilder();
+        String cmd = readProc("/proc/self/cmdline").replace('\0', ' ').trim();
+        sb.append("\n[proc] cmdline=").append(cmd);
+        String maps = readProc("/proc/self/maps");
+        int total = 0, leak = 0;
+        for (String line : maps.split("\n")) {
+            if (line.isEmpty()) continue;
+            total++;
+            if (line.contains("io.vax.host") || line.contains("libsubstrate")
+                    || line.contains("libva-native") || line.contains("libva++")) leak++;
+        }
+        sb.append("\n[proc] maps lines=").append(total).append(" VA-leak=").append(leak);
+        for (String line : readProc("/proc/self/status").split("\n")) {
+            if (line.startsWith("Name:") || line.startsWith("TracerPid:"))
+                sb.append("\n[proc] ").append(line.trim());
+        }
+        return sb.toString();
+    }
+
     /** Writes "vax-io" to an absolute path and reports whether it succeeded and exists after. */
     private static String probe(String path) {
         try {
@@ -63,6 +97,7 @@ public class HelloActivity extends Activity {
         // package. Real /data/data/<pkg>/lib/ does not exist, so success means the exported dlopen
         // hook redirected the absolute path into the sandbox.
         info += "\ndlopen /data/data/io.vax.hello/lib/libz.so -> " + nativeDlopen("/data/data/io.vax.hello/lib/libz.so");
+        info += procSummary();
         Log.i("HELLO", info.replace('\n', ' '));
         TextView tv = new TextView(this);
         tv.setTextSize(18);

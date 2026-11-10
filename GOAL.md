@@ -43,3 +43,12 @@
 - 2026-11-10 — 샌드박스 투명성 1차 구현 커밋(`d4dacdd2`). 네이티브 proc 필터링 + Java 측
   경로 정규화/adb 은닉. `nativeLibraryDir`은 동적 링커가 직접 쓰는 필드라 정규화에서 제외
   (정규화 시 `System.loadLibrary` 실패하는 회귀 확인·수정). arm64 빌드·hello 회귀 검증.
+- 2026-11-10 — proc 필터링 **기능 검증**. hello에 proc-probe 추가(maps/cmdline/status를
+  게스트 내부에서 읽어 확인). 결과: maps 2590줄 중 VA-leak **0**, cmdline/comm/status Name
+  모두 게스트명으로 위장, TracerPid 0. 빈두(5-split Godot) 회귀: 동일 Godot surface 지점까지
+  도달(알려진 오디오 크래시, sourceDir 정규화 회귀 없음). proc 가로채기 커버리지 확장
+  (environ의 LD_PRELOAD/V_* 은닉, mounts/mountinfo, comm) — 빌드·검증 완료.
+- 2026-11-10 — 도깨비 탐지 로그(`app_shareds`) 확인: 트리거된 단일 벡터 = **ADB_ENABLED**
+  (LifeCycle 마커는 미트리거). adb가 실제로 켜져 있어서 발생. Java Settings 훅이 못 잡음
+  → LIAPP이 네이티브로 adb 상태 읽는 것으로 추정. 다음: USB 디버깅 끄고 폰에서 직접 터치
+  실행해 ADB_ENABLED가 유일 게이트인지 확인(사용자 진행).
