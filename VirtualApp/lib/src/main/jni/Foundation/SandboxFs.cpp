@@ -112,20 +112,30 @@ const char *relocate_path(const char *path, int *result) {
             return NULL;
         }
     }
+    // Pick the longest matching prefix, not the first registered one. Rules are added
+    // broad-first (e.g. "/data/data/<pkg>" before "/data/data/<pkg>/lib/"), so first-match
+    // sent "<pkg>/lib/foo.so" to the data dir instead of the app lib dir. Longest orig_path
+    // wins, which is the most specific redirect.
+    ReplaceItem *best = NULL;
     for (int i = 0; i < replace_item_count; ++i) {
         ReplaceItem &item = replace_items[i];
         if (match_path(item.is_folder, item.orig_size, item.orig_path, path)) {
-            *result = MATCH;
-            int len = strlen(path);
-            if (len < item.orig_size) {
-                //remove last /
-                std::string redirect_path(item.new_path, 0, item.new_size - 1);
-                return strdup(redirect_path.c_str());
-            } else {
-                std::string redirect_path(item.new_path);
-                redirect_path += path + item.orig_size;
-                return strdup(redirect_path.c_str());
+            if (best == NULL || item.orig_size > best->orig_size) {
+                best = &item;
             }
+        }
+    }
+    if (best != NULL) {
+        *result = MATCH;
+        int len = strlen(path);
+        if (len < best->orig_size) {
+            //remove last /
+            std::string redirect_path(best->new_path, 0, best->new_size - 1);
+            return strdup(redirect_path.c_str());
+        } else {
+            std::string redirect_path(best->new_path);
+            redirect_path += path + best->orig_size;
+            return strdup(redirect_path.c_str());
         }
     }
     *result = NOT_MATCH;

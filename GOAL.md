@@ -140,4 +140,8 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
   - 결과: 수정 전 파일을 app 디렉터리에 뒀을 때 실패 로그가 리다이렉트된 경로를 그대로 보여줌(`library "/data/user/0/io.vax.host/virtual/data/user/0/io.vax.hello/lib/libz.so" not found`) → **훅이 절대경로를 샌드박스로 재작성함을 확인**. 파일을 실제 리다이렉트 대상(`virtual/data/user/0/io.vax.hello/lib/`)에 두자 `dlopen -> ok`. hello FATAL 0 / SIGSEGV 0.
   - 부수 확인: `System.loadLibrary("vaxprobe")`가 샌드박스에서 정상 로드됨 → ART가 `nativeLibraryDir`(VA가 샌드박스 절대경로로 설정)로 해석하므로 **`android_dlopen_ext` 훅은 기능상 불필요**(앱이 직접 절대경로로 `android_dlopen_ext`를 호출하는 드문 경우만 미대응).
   - 관찰(후속 과제): `relocate_path`가 가장 먼저 등록된 규칙을 쓰는 듯 — `/data/data/<pkg>/lib/`(앱 lib 디렉터리)보다 넓은 `/data/data/<pkg>`(dataDir) 규칙이 먼저 매칭됨. 현 테스트에선 dataDir/lib에 파일을 둬 통과했으나, 접두사 최장일치가 아니면 lib 전용 리다이렉트가 무시될 수 있음 → 백로그.
+- 2026-11-10 **relocate_path 최장 접두사 일치 (`SandboxFs.cpp`)**:
+  - 결함: `relocate_path`가 `replace_items`를 **등록 순서로 첫 매칭**에서 반환. 규칙이 넓은 것부터 등록되어(`/data/data/<pkg>` → dataDir 가 `/data/data/<pkg>/lib/` → 앱 lib 보다 먼저), 게스트가 `/data/data/<pkg>/lib/foo.so`를 열면 **앱 lib 디렉터리가 아니라 dataDir/lib로 잘못 리다이렉트**됨(실제 .so가 없는 곳).
+  - 수정: 매칭되는 항목 중 `orig_size`가 가장 긴(=가장 구체적인) 규칙을 선택. 단일 매칭 시 동작 불변.
+  - 검증(hello dlopen 프로브, 절대경로 `/data/data/io.vax.hello/lib/libz.so`): 수정 전 리다이렉트 대상이 dataDir(`virtual/data/user/0/io.vax.hello/lib/`), 수정 후 앱 lib(`virtual/data/app/io.vax.hello/lib/`)로 바뀜 → 앱 lib에 libz.so를 두자 `dlopen -> ok`. dataDir 경로(쓰기/`statvfs`)는 그대로 통과(회귀 없음). hello FATAL 0/SIGSEGV 0. 도깨비 회귀: FATAL 2건 모두 기존 CNF, SIGSEGV 0, 금지 경고 0(`libpenguin.so` 미로드는 이전부터 있던 Samsung 벤더 노이즈, soname 로드라 relocate 대상 아님).
 
