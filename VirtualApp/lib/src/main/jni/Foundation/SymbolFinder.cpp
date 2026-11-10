@@ -11,6 +11,9 @@
 /* memory map for libraries */
 #define MAX_NAME_LEN 256
 #define MEMORY_ONLY  "[memory]"
+/* Upper bound on distinct mappings parsed from /proc/pid/maps. Modern ART + Unity
+ * processes can have a few thousand mappings, well past the old fixed 1000. */
+#define MAX_MM 8192
 struct mm {
     char name[MAX_NAME_LEN];
     unsigned long start, end;
@@ -244,7 +247,23 @@ static int load_memmap(pid_t pid, struct mm *mm, int *nmmp) {
 
     p = p_buf;
     while (1) {
-        rv = read(fd, p, buf_size - (p - p_buf));
+        // Grow the buffer when nearly full so large /proc/pid/maps (Android 16 ART +
+        // Unity can exceed the old fixed 256KB) are read fully instead of truncated.
+        if ((size_t)(p - p_buf) + 4096 >= buf_size) {
+            size_t off = p - p_buf;
+            size_t new_size = buf_size * 2;
+            char *np = (char *) realloc(p_buf, new_size);
+            if (np == NULL) {
+                ALOGE("maps buffer realloc to %zu failed\n", new_size);
+                free(p_buf);
+                return -1;
+            }
+            p_buf = np;
+            buf_size = new_size;
+            p = p_buf + off;
+            memset(p, 0, buf_size - off);
+        }
+        rv = read(fd, p, buf_size - (p - p_buf) - 1);
         if (0 > rv) {
             ALOGE("%s read", __FUNCTION__);
             free(p_buf);
@@ -253,11 +272,6 @@ static int load_memmap(pid_t pid, struct mm *mm, int *nmmp) {
         if (0 == rv)
             break;
         p += rv;
-        if (p - p_buf >= buf_size) {
-            ALOGE("Too many memory mapping\n");
-            free(p_buf);
-            return -1;
-        }
     }
     close(fd);
 
@@ -265,9 +279,17 @@ static int load_memmap(pid_t pid, struct mm *mm, int *nmmp) {
     m = mm;
     while (p) {
         /* parse current map line */
-        rv = sscanf(p, "%08lx-%08lx %*s %*s %*s %*s %s\n", &start, &end, name);
+        // %08lx caps scanf at 8 hex digits, truncating 64-bit (arm64) addresses and
+        // derailing the rest of the line (so the mapping name was never parsed). Use
+        // unbounded %lx so full 64-bit start/end and the pathname parse correctly.
+        rv = sscanf(p, "%lx-%lx %*s %*s %*s %*s %s\n", &start, &end, name);
 
         p = strtok(NULL, "\n");
+
+        if (nmm >= MAX_MM) {
+            // Array full: stop rather than overflow the caller's fixed mm[MAX_MM].
+            break;
+        }
 
         if (rv == 2) {
             m = &mm[nmm++];
@@ -378,22 +400,30 @@ static int lookup_func_sym(symtab_t s, char *name, unsigned long *val) {
 
 int find_name(pid_t pid, const char *name, const char *libn,
               unsigned long *addr) {
-    struct mm mm[1000] = { 0 };
+    // Heap-allocate: MAX_MM entries is multiple MB, too large for the stack.
+    struct mm *mm = (struct mm *) calloc(MAX_MM, sizeof(struct mm));
     unsigned long libcaddr;
     int nmm;
     char libc[1024] = { 0 };
     symtab_t s;
 
+    if (mm == NULL) {
+        ALOGE("cannot alloc memory map table\n");
+        return -1;
+    }
     if (0 > load_memmap(pid, mm, &nmm)) {
         ALOGD("cannot read memory map\n");
+        free(mm);
         return -1;
     }
     if (0
         > find_libname((char *) libn, (char *) libc, sizeof(libc),
                        &libcaddr, mm, nmm)) {
         ALOGD("cannot find lib: %s\n", libn);
+        free(mm);
         return -1;
     }
+    free(mm);
     //ALOGD("lib: >%s<\n", libc)
     s = load_symtab(libc);
     if (!s) {
@@ -409,20 +439,27 @@ int find_name(pid_t pid, const char *name, const char *libn,
 }
 
 int find_libbase(pid_t pid, const char *libn, unsigned long *addr) {
-    struct mm mm[1000] = { 0 };
+    struct mm *mm = (struct mm *) calloc(MAX_MM, sizeof(struct mm));
     unsigned long libcaddr;
     int nmm;
     char libc[1024] = { 0 };
     symtab_t s;
 
+    if (mm == NULL) {
+        ALOGE("cannot alloc memory map table\n");
+        return -1;
+    }
     if (0 > load_memmap(pid, mm, &nmm)) {
         ALOGD("cannot read memory map\n");
+        free(mm);
         return -1;
     }
     if (0 > find_libname(libn, libc, sizeof(libc), &libcaddr, mm, nmm)) {
         ALOGD("cannot find lib\n");
+        free(mm);
         return -1;
     }
+    free(mm);
     *addr = libcaddr;
     return 0;
 }

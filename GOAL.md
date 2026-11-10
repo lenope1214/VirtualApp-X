@@ -40,7 +40,7 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
 | P1-c | 최소 호스트 앱(`host`) + 시험용 타깃(`hello`) 작성 | ✅ 완료 — 호스트가 Android 16에서 크래시 없이 시작, `VirtualCore.startup OK` (A2 충족) |
 | P2 | Android 16 프레임워크 대응: hidden API 우회, AMS/ATMS/PM 훅, 앱 프로세스 기동 | ✅ 완료 — hello가 가상 프로세스(uid 10001, 데이터 `virtual/` 하위)에서 화면까지 뜸 |
 | P3 | split APK 설치 파이프라인, arm64 라이브러리 추출 | ✅ 완료 — 빈두 base+split 4개 설치, arm64 .so 3개 추출 (A3 충족) |
-| P4 | 저장소/IO 리다이렉션 (scoped storage 경로) | ⬜ |
+| P4 | 저장소/IO 리다이렉션 (scoped storage 경로) | 🔄 부분 (maps 파서 arm64 수정; ELF64 심볼테이블/기능검증 남음) |
 | P4.5 | PendingIntent/bindService 패키지 스푸핑 훅 (Android 11+ `bindServiceInstance`/`getIntentSenderWithFeature`) | ✅ 완료 |
 | P5 | 빈두 실행 안정화 (Godot/Vulkan, WebRTC, 알림) | ⬜ |
 | P6 | (필요 시) Google 서비스 | ⬜ |
@@ -96,4 +96,12 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
   - 근본 원인: `MethodInvocationStub.invoke()`는 **실제 호출된 메서드명**으로 프록시를 찾는데(기존 프록시명이 안 맞으면 그대로 실제 AMS로 통과), Android 11+/삼성 One UI는 레거시와 다른 메서드를 호출. (1) `bindService` → `bindServiceInstance`(API 31+)/`bindIsolatedService`(API 29-30), (2) `getIntentSender` → `getIntentSenderWithFeature`(featureId가 index 2에 삽입되어 이후 인자 +1 시프트).
   - 수정(`MethodProxies.java`): `BindService`를 상속한 `BindServiceInstance`/`BindIsolatedService` 별칭 추가(선행 인자 배치 동일), `getIntentSenderWithFeature` 전용 프록시 추가(시프트된 인덱스로 pkg→호스트 치환·intents 리다이렉트), `GetIntentSender`에 게스트 패키지와 같은 문자열 인자를 호스트로 바꾸는 방어적 치환 추가(ROM별 인자 위치 차이 대비). `@Inject(MethodProxies.class)`가 서브클래스까지 자동 등록.
   - 검증: 기기(SM-F721N, Android 16) 도깨비 실행 로그에서 `not allowed to send as package` 0건, `Not allowed to bind to service` 0건(수정 전 각각 37/수 건). CNF(패커)와는 무관한 호환성 수정이며 도깨비를 포함한 모든 게스트 앱에 공통 적용.
+- 2026-11-10 **P4 부분 — 네이티브 maps 파서 arm64 수정 (`SymbolFinder.cpp`)**:
+  - 증상: 게스트 기동 때마다 `E/VA++ Too many memory mapping` + `cannot read memory map`. IO 리다이렉션 관련으로 분류돼 있던 경고.
+  - 분석: 핵심 IO 훅(`faccessat/__openat/fstatat64/...`)은 `dlsym`+`MSHookFunction` 경로라 이 코드와 **무관**. `load_memmap`/`SymbolFinder`는 **linker의 `do_dlopen` 훅**(dlopen 경로 리다이렉트/재훅)에만 쓰임. 세 가지 실제 결함 발견·수정:
+    1. `/proc/pid/maps`를 고정 256KB 버퍼로 읽어 Android 16 ART+Unity 맵에서 넘침 → `realloc` 동적 확장으로 전체 읽기.
+    2. `mm[nmm++]`에 경계검사 없음 + 스택 배열 → 1000개 초과 시 스택 오버플로 위험. `MAX_MM` 상한 + 경계검사 + 힙(calloc) 할당으로 전환.
+    3. maps 파싱 `sscanf("%08lx-%08lx ...")`의 `%08lx`가 scanf에서 최대 8자리 → arm64 64비트 주소를 잘라 라인 파싱 붕괴(이름 미획득). `%lx`로 수정 → `linker64` 정상 인식.
+  - 검증(도깨비 실행): `Too many memory mapping`/`cannot read memory map`/`cannot find lib: linker` 모두 0건, 빌드 성공, 새 FATAL/SIGSEGV 0.
+  - 남음: `load_symtab`이 `Elf32_Sym` 전용이라 ELF64 `linker64` 심볼테이블을 못 읽음(`cannot read symbol table / elf error 2`) → `do_dlopen` 훅은 아직 미설치. ELF64 심볼 파서는 별도 과제. 또한 IO 리다이렉션 "기능" 검증(게스트 절대경로 쓰기가 virtual/로 가는지)은 미완.
 
