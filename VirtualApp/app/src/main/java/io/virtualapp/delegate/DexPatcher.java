@@ -37,6 +37,9 @@ final class DexPatcher {
         if (context == null) return;
         try {
             File dexFile = new File(context.getCodeCacheDir(), PATCH_DEX);
+            // 진단용: 이 로그가 보이면 게스트 프로세스에서 delegate 훅이 실제로 실행된 것.
+            Log.i(TAG, "injectIfPresent: pkg=" + context.getPackageName()
+                    + " dex=" + dexFile.getAbsolutePath() + " exists=" + dexFile.isFile());
             if (!dexFile.isFile() || dexFile.length() == 0) return; // no-op: 배포 안 됨
 
             ClassLoader target = context.getClassLoader();
