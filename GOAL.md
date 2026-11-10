@@ -104,4 +104,9 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
     3. maps 파싱 `sscanf("%08lx-%08lx ...")`의 `%08lx`가 scanf에서 최대 8자리 → arm64 64비트 주소를 잘라 라인 파싱 붕괴(이름 미획득). `%lx`로 수정 → `linker64` 정상 인식.
   - 검증(도깨비 실행): `Too many memory mapping`/`cannot read memory map`/`cannot find lib: linker` 모두 0건, 빌드 성공, 새 FATAL/SIGSEGV 0.
   - 남음: `load_symtab`이 `Elf32_Sym` 전용이라 ELF64 `linker64` 심볼테이블을 못 읽음(`cannot read symbol table / elf error 2`) → `do_dlopen` 훅은 아직 미설치. ELF64 심볼 파서는 별도 과제. 또한 IO 리다이렉션 "기능" 검증(게스트 절대경로 쓰기가 virtual/로 가는지)은 미완.
+- 2026-11-10 **AutoFillManagerStub NPE 정리 (호환성, `AutoFillManagerStub.java`)**:
+  - 증상: 게스트 기동 때마다 `E/AutoFillManagerStub AutoFillManagerStub inject error` + `NPE: Application.getContentResolver() ... AutofillManager.<init>`. `VirtualCore.startup`(attachBaseContext) 시점엔 Application에 ContentResolver가 없어, API 12+에서 `getSystemService("autofill")`가 DeviceConfig 플래그 조회 중 NPE.
+  - 추가 문제: 그 NPE가 catch 후 `return`해서 **아래의 autofill 메서드 프록시(startSession/updateOrRestartSession/isServiceEnabled, 게스트 패키지→호스트 치환)까지 전부 미설치**였음.
+  - 수정: 메서드 프록시를 try 밖으로 올려 **항상 설치**(super.inject()의 바인더 캐시 훅 기반, mService 인스턴스 교체와 무관). mService 교체는 best-effort로 두고 실패 시 `E`→`D` 레벨로 조용히 로그(초기 기동엔 정상 상황이며, 이후 생성되는 매니저는 바인더 캐시 훅이 커버).
+  - 검증(도깨비 실행): `AutoFillManagerStub inject error` 및 autofill NPE 0건, 빌드 성공, 회귀 FATAL 없음(남은 FATAL은 기존 CNF뿐).
 
