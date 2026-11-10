@@ -14,7 +14,8 @@ public class MyComponentDelegate implements ComponentDelegate {
 
     @Override
     public void beforeApplicationCreate(Application application) {
-
+        // 게스트 앱 onCreate 직전(게스트 프로세스 내부). 배포된 패치 DEX가 있으면 주입, 없으면 no-op.
+        DexPatcher.injectIfPresent(application);
     }
 
     @Override
