@@ -109,4 +109,11 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
   - 추가 문제: 그 NPE가 catch 후 `return`해서 **아래의 autofill 메서드 프록시(startSession/updateOrRestartSession/isServiceEnabled, 게스트 패키지→호스트 치환)까지 전부 미설치**였음.
   - 수정: 메서드 프록시를 try 밖으로 올려 **항상 설치**(super.inject()의 바인더 캐시 훅 기반, mService 인스턴스 교체와 무관). mService 교체는 best-effort로 두고 실패 시 `E`→`D` 레벨로 조용히 로그(초기 기동엔 정상 상황이며, 이후 생성되는 매니저는 바인더 캐시 훅이 커버).
   - 검증(도깨비 실행): `AutoFillManagerStub inject error` 및 autofill NPE 0건, 빌드 성공, 회귀 FATAL 없음(남은 FATAL은 기존 CNF뿐).
+- 2026-11-10 **GMS/Play Store 가시성 (P6 일부, `HostApp.java` + `MethodProxies.java`)**:
+  - 증상: `NameNotFoundException: com.google.android.gms`, `requires the Google Play Store, but it is missing`, `Invalid GmsCore APK`, `Failed to resolve IID`. 기기에는 GMS와 Play Store(`com.android.vending`)가 정상 설치돼 있음.
+  - 근본원인: `MethodProxy.isVisiblePackage()`는 호스트/시스템/외부가시(`addVisibleOutsidePackage`) 패키지만 허용. 일반 사용자 앱인 GMS·Play Store는 게스트에 안 보여 `getPackageInfo`가 NameNotFound.
+  - 수정: `onServerProcess`에서 `com.google.android.gms`, `com.android.vending`을 외부 가시 목록에 등록 → 실제 PM 조회 통과. (설치된 패키지를 "조회 가능"하게 할 뿐, GMS가 검증하는 항목은 건드리지 않음.)
+  - 부수 수정: 위 변경으로 GMS 경로가 살아나면서 `BindService`의 `(int) args[5]` 캐스트가 `bindServiceInstance`의 long 플래그에서 `ClassCastException`(44건) 발생 → 내 P4.5 커밋의 잠재 결함. `NumArg.toInt`로 교체해 해결.
+  - 검증: GMS 경고 3종 0건, `Failed to resolve IID` 0건, `ClassCastException` 44→0, FATAL 44→1(기존 CNF만), bind/send 거부 0건.
+  - **보류(사용자 판단 필요)**: `GoogleApiManager: Unknown calling package name 'com.kakaogames.dokkaebi'` + `FirebaseMessaging error configuring notification delegate`. GMS가 호출자 uid(호스트)와 패키지명(게스트)의 불일치를 거부. 이를 해결하려면 Google 서비스에 호출자 신원을 위조해야 하므로, 무결성/검증 우회에 해당할 수 있어 자동 구현하지 않음.
 

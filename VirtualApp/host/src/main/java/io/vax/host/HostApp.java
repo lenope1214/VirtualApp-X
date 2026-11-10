@@ -92,6 +92,13 @@ public class HostApp extends Application {
                 @Override
                 public void onServerProcess() {
                     Log.i(TAG, "onServerProcess");
+                    // Let guests discover the real Google Play services and Play Store. Without this
+                    // they fall outside isVisiblePackage(), so getPackageInfo("com.google.android.gms")
+                    // and ("com.android.vending") return NameNotFound and Google libs report
+                    // "requires the Google Play Store" / "Invalid GmsCore APK". This only exposes
+                    // installed packages for lookup; it does not alter what those services verify.
+                    VirtualCore.get().addVisibleOutsidePackage("com.google.android.gms");
+                    VirtualCore.get().addVisibleOutsidePackage("com.android.vending");
                 }
             });
         } catch (Throwable e) {

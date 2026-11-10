@@ -58,6 +58,7 @@ import com.lody.virtual.helper.utils.ComponentUtils;
 import com.lody.virtual.helper.utils.DrawableUtils;
 import com.lody.virtual.helper.utils.FileUtils;
 import com.lody.virtual.helper.utils.Reflect;
+import com.lody.virtual.helper.utils.NumArg;
 import com.lody.virtual.helper.utils.VLog;
 import com.lody.virtual.os.VUserHandle;
 import com.lody.virtual.os.VUserInfo;
@@ -927,7 +928,9 @@ class MethodProxies {
             Intent service = (Intent) args[2];
             String resolvedType = (String) args[3];
             IServiceConnection conn = (IServiceConnection) args[4];
-            int flags = (int) args[5];
+            // bindServiceInstance (API 34+) passes BindServiceFlags as long; (int) cast throws
+            // ClassCastException. Read via NumArg so both int and long widths work.
+            int flags = NumArg.toInt(args[5]);
             int userId = VUserHandle.myUserId();
             if (isServerProcess()) {
                 userId = service.getIntExtra("_VA_|_user_id_", VUserHandle.USER_NULL);
