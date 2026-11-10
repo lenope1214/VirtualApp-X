@@ -61,7 +61,9 @@
 
 - [x] **P6 GMS/Play Store 가시성** — `requires the Google Play Store`, `Invalid GmsCore APK`, `NameNotFound com.google.android.gms` 해소 — `c191e41b` (+ bind flags long 캐스트 결함 `ClassCastException` 44→0 동반 수정).
 - [보류 — 사용자 판단 필요] **GMS 호출자 패키지 검증** — `GoogleApiManager: Unknown calling package name 'com.kakaogames.dokkaebi'`, `FirebaseMessaging error configuring notification delegate`. GMS가 호출자 uid(호스트)와 패키지명(게스트) 불일치를 거부. 해결은 Google 서비스에 호출자 신원을 위조하는 것이라 무결성/검증 우회에 해당할 수 있어 루프가 자동 구현하지 않음. 진행하려면 사용자가 명시적으로 승인해야 함.
-- [ ] **P4 IO 리다이렉션 기능 검증** — 게스트의 절대경로 파일 I/O가 실제 `virtual/`로 가는지 기능 테스트. 비root 검증 방법부터 설계(예: hello 타깃에 파일 쓰기 코드 추가 후 호스트 `run-as`로 결과 경로 확인).
+- [x] **P4 IO 리다이렉션 기능 검증** — 절대경로 열기가 리다이렉트되지 않던 결함(`__openat` 미노출, API 36에서 열기 훅 미설치) 수정: 공개 심볼 `openat`/`open` 훅. `/data/data/<pkg>` 쓰기가 호스트 `virtual/`로 리다이렉트됨 확인. — `af3d44df`.
+- [ ] **미노출 심볼 훅 보강 (statfs/getcwd)** — `__statfs`, `__statfs64`, `__getcwd`도 dlsym NULL(API 36)이라 훅 미설치. 같은 방식으로 공개 심볼(`statfs`, `statfs64`, `getcwd`)로 대체 가능한지 확인 후 적용. 위치: `IOUniformer.cpp` `startUniformer`. 검증: 해당 훅 설치 확인 + hello 프로브 확장.
+- [보류 — 설계 결정 필요] **/sdcard 가상 스토리지 리다이렉트 정책** — 현재 `/sdcard`는 권한 없는 게스트에 `EPERM`(scoped storage)이고 VA 가상 스토리지가 꺼져 있어 리다이렉트 안 됨. 게스트 외부 저장소를 샌드박스로 격리할지(가상 스토리지 켜기 vs 공유 유지)는 사용자 정책 결정 사항.
 - [ ] **P4 ELF64 심볼 파서** — `D/VA++ cannot read symbol table / elf error 2`. `load_symtab`이 `Elf32_Sym` 전용이라 `linker64`(ELF64) 심볼테이블을 못 읽어 `do_dlopen` 훅 미설치. 우선순위 낮음(핵심 IO 훅은 dlsym 경로로 이미 동작). 위치: `SymbolFinder.cpp`.
 - [ ] **발견 대기** — 각 반복 logcat 스캔으로 새 범위 안 항목을 여기에 추가.
 
