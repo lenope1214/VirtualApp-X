@@ -5,6 +5,7 @@
 #include <fb/include/fb/Build.h>
 #include <fb/include/fb/ALog.h>
 #include <fb/include/fb/fbjni.h>
+#include <sys/prctl.h>
 #include "VAJni.h"
 
 using namespace facebook::jni;
@@ -42,6 +43,7 @@ static void jni_nativeIORedirect(alias_ref<jclass> jclazz, jstring origPath, jst
 static void jni_nativeSetGuestPackage(alias_ref<jclass>, jstring pkg) {
     ScopeUtfString guest_pkg(pkg);
     setenv("V_GUEST_PKG", guest_pkg.c_str(), 1);
+    prctl(PR_SET_NAME, guest_pkg.c_str());
 }
 
 static jstring jni_nativeGetRedirectedPath(alias_ref<jclass> jclazz, jstring origPath) {

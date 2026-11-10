@@ -40,3 +40,6 @@ captures/
 *.jks
 .aider*
 decrypted_assets/
+
+# Local RE / third-party analysis artifacts (not for publication)
+_analysis/

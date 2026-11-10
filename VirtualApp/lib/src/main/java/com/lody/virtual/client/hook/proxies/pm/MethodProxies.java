@@ -72,9 +72,10 @@ class MethodProxies {
 
     static void normalizeAppInfoPaths(ApplicationInfo ai) {
         if (ai == null) return;
-        // nativeLibraryDir is consumed directly by the dynamic linker / ClassLoader for
-        // dlopen resolution, which does not fully pass through the IO redirect, so leave it
-        // on the real sandbox path to avoid breaking System.loadLibrary.
+        // nativeLibraryDir must keep the real VA path — the linker uses its own
+        // syscall wrappers (bypassing our libc hooks) so it needs a resolvable path
+        // to find extracted .so files. The dladdr hook in IOUniformer sanitises the
+        // path at native query time instead.
         ai.dataDir = stripVaPrefix(ai.dataDir);
         ai.sourceDir = stripVaPrefix(ai.sourceDir);
         ai.publicSourceDir = stripVaPrefix(ai.publicSourceDir);

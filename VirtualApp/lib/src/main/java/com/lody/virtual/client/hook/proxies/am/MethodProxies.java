@@ -944,8 +944,12 @@ class MethodProxies {
                     service.setComponent(new ComponentName(serviceInfo.packageName, serviceInfo.name));
                 }
                 conn = ServiceConnectionDelegate.getDelegate(conn);
-                return VActivityManager.get().bindService(caller.asBinder(), token, service, resolvedType,
-                        conn, flags, userId);
+                try {
+                    return VActivityManager.get().bindService(caller.asBinder(), token, service, resolvedType,
+                            conn, flags, userId);
+                } catch (NullPointerException e) {
+                    return 0;
+                }
             }
             return method.invoke(who, args);
         }

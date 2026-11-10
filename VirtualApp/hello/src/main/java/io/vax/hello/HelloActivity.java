@@ -62,7 +62,33 @@ public class HelloActivity extends Activity {
             if (line.contains("io.vax.host") || line.contains("/virtual/")) mountLeak++;
         }
         sb.append("\n[proc] mounts VA-leak=").append(mountLeak);
+        sb.append(taskCommSummary());
         return sb.toString();
+    }
+
+    /**
+     * Worker-thread comm fidelity. LIAPP reads /proc/<tid>/comm for every thread; if the
+     * sandbox rewrites them all to the package name, uniform comm is itself a fingerprint.
+     * A real ART app shows diverse names (FinalizerDaemon, Jit thread pool, Binder:*, ...).
+     * Reads the numeric /proc/<tid>/comm form (the one LIAPP uses and the hook intercepts).
+     */
+    private static String taskCommSummary() {
+        java.util.TreeMap<String, Integer> hist = new java.util.TreeMap<>();
+        int total = 0, hostLeak = 0, namedGuest = 0;
+        String[] tids = new File("/proc/self/task").list();
+        if (tids != null) {
+            for (String tid : tids) {
+                String comm = readProc("/proc/" + tid + "/comm").trim();
+                if (comm.isEmpty() || comm.startsWith("READ-FAIL")) continue;
+                total++;
+                hist.merge(comm, 1, Integer::sum);
+                if (comm.contains("vax.host")) hostLeak++;
+                if (comm.equals("io.vax.hello")) namedGuest++;
+            }
+        }
+        return "\n[task] threads=" + total + " distinct=" + hist.size()
+                + " host-leak=" + hostLeak + " named-guest=" + namedGuest
+                + " names=" + hist;
     }
 
     /** Writes "vax-io" to an absolute path and reports whether it succeeded and exists after. */
