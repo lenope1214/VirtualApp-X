@@ -469,6 +469,23 @@ HOOK_DEF(int, __openat, int fd, const char *pathname, int flags, int mode) {
     FREE(redirect_path, pathname);
     return ret;
 }
+// Android 16 bionic does not export __openat (dlsym -> NULL), so the __openat hook above never
+// installed and absolute-path opens were never redirected. Hook the exported openat/open
+// wrappers instead; libcore's open path goes through them via the PLT.
+HOOK_DEF(int, openat, int fd, const char *pathname, int flags, int mode) {
+    int res;
+    const char *redirect_path = relocate_path(pathname, &res);
+    int ret = syscall(__NR_openat, fd, redirect_path, flags, mode);
+    FREE(redirect_path, pathname);
+    return ret;
+}
+HOOK_DEF(int, open, const char *pathname, int flags, int mode) {
+    int res;
+    const char *redirect_path = relocate_path(pathname, &res);
+    int ret = syscall(__NR_openat, AT_FDCWD, redirect_path, flags, mode);
+    FREE(redirect_path, pathname);
+    return ret;
+}
 // int __open(const char *pathname, int flags, int mode);
 HOOK_DEF(int, __open, const char *pathname, int flags, int mode) {
     int res;
@@ -673,6 +690,8 @@ void IOUniformer::startUniformer(const char *so_path, int api_level, int preview
     if (handle) {
         HOOK_SYMBOL(handle, faccessat);
         HOOK_SYMBOL(handle, __openat);
+        HOOK_SYMBOL(handle, openat);
+        HOOK_SYMBOL(handle, open);
         HOOK_SYMBOL(handle, fchmodat);
         HOOK_SYMBOL(handle, fchownat);
         HOOK_SYMBOL(handle, renameat);

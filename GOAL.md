@@ -116,4 +116,11 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
   - 부수 수정: 위 변경으로 GMS 경로가 살아나면서 `BindService`의 `(int) args[5]` 캐스트가 `bindServiceInstance`의 long 플래그에서 `ClassCastException`(44건) 발생 → 내 P4.5 커밋의 잠재 결함. `NumArg.toInt`로 교체해 해결.
   - 검증: GMS 경고 3종 0건, `Failed to resolve IID` 0건, `ClassCastException` 44→0, FATAL 44→1(기존 CNF만), bind/send 거부 0건.
   - **보류(사용자 판단 필요)**: `GoogleApiManager: Unknown calling package name 'com.kakaogames.dokkaebi'` + `FirebaseMessaging error configuring notification delegate`. GMS가 호출자 uid(호스트)와 패키지명(게스트)의 불일치를 거부. 이를 해결하려면 Google 서비스에 호출자 신원을 위조해야 하므로, 무결성/검증 우회에 해당할 수 있어 자동 구현하지 않음.
+- 2026-11-10 **P4 IO 리다이렉션 기능 검증 — 절대경로 열기가 실제로 리다이렉트되지 않던 결함 수정 (`IOUniformer.cpp`)**:
+  - 검증 방법: `hello`에 절대경로 프로브 추가(`/data/data/io.vax.hello/...`, `/sdcard/...`). 결과 수정 전 `/data/data` → `ENOENT`(리다이렉트 안 됨), `/sdcard` → `EPERM`. 호스트 `virtual/`에 프로브 파일 없음.
+  - 근본원인: 임시 진단(`VAX-IODIAG`)으로 확정 — `dlsym("__openat")` = NULL. Android 16 bionic은 `__openat`/`__statfs`/`__statfs64`/`__getcwd`를 공개 심볼로 노출하지 않음 → `__openat` 훅이 **한 번도 설치되지 않음**. 또 `__open` 훅은 API ≤20 분기 안에만 있어 API 36에서 미설치. 결과적으로 열기 경로 리다이렉트 전무(게스트 `files/` 경로만 Java 쪽 치환으로 샌드박스에 들어감).
+  - 수정: 공개 심볼 `openat`, `open`을 훅하는 `new_openat`/`new_open` 추가 및 `startUniformer`에 등록(`syscall(__NR_openat)` 직접 호출, 재귀 없음). 임시 진단 로그는 검증 후 제거.
+  - 검증(수정 후, 최종 빌드): `/data/data/io.vax.hello/vax_io_abs_probe.txt` 쓰기 성공 → 호스트 `virtual/data/user/0/io.vax.hello/vax_io_abs_probe.txt`에 존재. hello FATAL 0, SIGSEGV 0. 도깨비 회귀: FATAL 3건 모두 기존 `DokkaebiUnityActivity` CNF, SIGSEGV 0, 금지 경고 0, 신규 ENOENT/EACCES 없음.
+  - 해석 주의: `/sdcard` `EPERM`은 리다이렉트 실패가 아니라 권한 없는 게스트 uid의 scoped storage 정책이며, VA는 가상 스토리지를 켜지 않으면 `/sdcard`를 리다이렉트하지 않음(기본 동작). 격리 검증 기준은 `/data/data` 경로.
+  - 남은 항목: `statfs`/`getcwd`도 미노출 심볼이라 훅 미설치(백로그). ELF64 심볼 파서(`linker64` 파싱 오류)는 별도.
 
