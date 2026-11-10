@@ -12,6 +12,8 @@
 #include "SymbolFinder.h"
 #include <sys/syscall.h>
 #include "LegacySyscall.h"
+#include <stdio.h>
+#include <string.h>
 
 bool iu_loaded = false;
 
@@ -101,6 +103,113 @@ const char *IOUniformer::reverse(const char *_path) {
     return reverse_relocate_path(_path);
 }
 
+
+/* Sandbox transparency — proc filesystem filtering (3-A, 3-B, TracerPid) */
+
+#ifndef __NR_memfd_create
+#if defined(__arm__)
+#define __NR_memfd_create 385
+#elif defined(__aarch64__)
+#define __NR_memfd_create 279
+#elif defined(__i386__)
+#define __NR_memfd_create 356
+#elif defined(__x86_64__)
+#define __NR_memfd_create 319
+#endif
+#endif
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC 0x0001U
+#endif
+
+static bool is_proc_path(const char *path, const char *leaf) {
+    if (!path || !leaf) return false;
+    char buf[80];
+    snprintf(buf, sizeof(buf), "/proc/self/%s", leaf);
+    if (strcmp(path, buf) == 0) return true;
+    snprintf(buf, sizeof(buf), "/proc/%d/%s", getpid(), leaf);
+    return strcmp(path, buf) == 0;
+}
+
+static int make_memfd(const char *tag) {
+    return (int) syscall(__NR_memfd_create, tag, MFD_CLOEXEC);
+}
+
+static bool should_hide_maps_line(const char *line) {
+    if (strstr(line, "libsubstrate")) return true;
+    if (strstr(line, "CydiaSubstrate")) return true;
+    if (strstr(line, "libva-native")) return true;
+    if (strstr(line, "libva++")) return true;
+    const char *so_path = getenv("V_SO_PATH");
+    if (so_path && strstr(line, so_path)) return true;
+    if (strstr(line, "io.vax.host")) {
+        const char *guest = getenv("V_GUEST_PKG");
+        if (guest && strstr(line, guest)) return false;
+        return true;
+    }
+    return false;
+}
+
+static int open_filtered_maps() {
+    int rfd = (int) syscall(__NR_openat, AT_FDCWD, "/proc/self/maps", O_RDONLY, 0);
+    if (rfd < 0) return rfd;
+    int mfd = make_memfd("m");
+    if (mfd < 0) { close(rfd); return -1; }
+    FILE *fp = fdopen(rfd, "r");
+    if (!fp) { close(rfd); close(mfd); return -1; }
+    char line[512];
+    while (fgets(line, sizeof(line), fp)) {
+        if (!should_hide_maps_line(line))
+            write(mfd, line, strlen(line));
+    }
+    fclose(fp);
+    lseek(mfd, 0, SEEK_SET);
+    return mfd;
+}
+
+static int open_guest_cmdline() {
+    const char *guest = getenv("V_GUEST_PKG");
+    if (!guest) return -1;
+    int mfd = make_memfd("c");
+    if (mfd < 0) return -1;
+    write(mfd, guest, strlen(guest) + 1);
+    lseek(mfd, 0, SEEK_SET);
+    return mfd;
+}
+
+static int open_filtered_status() {
+    int rfd = (int) syscall(__NR_openat, AT_FDCWD, "/proc/self/status", O_RDONLY, 0);
+    if (rfd < 0) return rfd;
+    int mfd = make_memfd("s");
+    if (mfd < 0) { close(rfd); return -1; }
+    FILE *fp = fdopen(rfd, "r");
+    if (!fp) { close(rfd); close(mfd); return -1; }
+    const char *guest = getenv("V_GUEST_PKG");
+    char line[256];
+    while (fgets(line, sizeof(line), fp)) {
+        if (strncmp(line, "TracerPid:", 10) == 0)
+            write(mfd, "TracerPid:\t0\n", 13);
+        else if (guest && strncmp(line, "Name:", 5) == 0) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "Name:\t%.15s\n", guest);
+            write(mfd, buf, strlen(buf));
+        } else
+            write(mfd, line, strlen(line));
+    }
+    fclose(fp);
+    lseek(mfd, 0, SEEK_SET);
+    return mfd;
+}
+
+static int maybe_intercept_proc(const char *path) {
+    if (!path) return -1;
+    if (is_proc_path(path, "maps"))    return open_filtered_maps();
+    if (is_proc_path(path, "cmdline")) {
+        int fd = open_guest_cmdline();
+        if (fd >= 0) return fd;
+    }
+    if (is_proc_path(path, "status"))  return open_filtered_status();
+    return -1;
+}
 
 __BEGIN_DECLS
 
@@ -447,6 +556,8 @@ HOOK_DEF(int, chdir, const char *pathname) {
 
 // int __openat(int fd, const char *pathname, int flags, int mode);
 HOOK_DEF(int, __openat, int fd, const char *pathname, int flags, int mode) {
+    int proc_fd = maybe_intercept_proc(pathname);
+    if (proc_fd >= 0) return proc_fd;
     int res;
     const char *redirect_path = relocate_path(pathname, &res);
     int ret = syscall(__NR_openat, fd, redirect_path, flags, mode);
@@ -457,6 +568,8 @@ HOOK_DEF(int, __openat, int fd, const char *pathname, int flags, int mode) {
 // installed and absolute-path opens were never redirected. Hook the exported openat/open
 // wrappers instead; libcore's open path goes through them via the PLT.
 HOOK_DEF(int, openat, int fd, const char *pathname, int flags, int mode) {
+    int proc_fd = maybe_intercept_proc(pathname);
+    if (proc_fd >= 0) return proc_fd;
     int res;
     const char *redirect_path = relocate_path(pathname, &res);
     int ret = syscall(__NR_openat, fd, redirect_path, flags, mode);
@@ -464,6 +577,8 @@ HOOK_DEF(int, openat, int fd, const char *pathname, int flags, int mode) {
     return ret;
 }
 HOOK_DEF(int, open, const char *pathname, int flags, int mode) {
+    int proc_fd = maybe_intercept_proc(pathname);
+    if (proc_fd >= 0) return proc_fd;
     int res;
     const char *redirect_path = relocate_path(pathname, &res);
     int ret = syscall(__NR_openat, AT_FDCWD, redirect_path, flags, mode);
@@ -472,6 +587,8 @@ HOOK_DEF(int, open, const char *pathname, int flags, int mode) {
 }
 // int __open(const char *pathname, int flags, int mode);
 HOOK_DEF(int, __open, const char *pathname, int flags, int mode) {
+    int proc_fd = maybe_intercept_proc(pathname);
+    if (proc_fd >= 0) return proc_fd;
     int res;
     const char *redirect_path = relocate_path(pathname, &res);
     int ret = syscall(__NR_open, redirect_path, flags, mode);

@@ -27,6 +27,8 @@ public class SettingsProviderHook extends ExternalProviderHook {
     static {
         PRE_SET_VALUES.put("user_setup_complete", "1");
         PRE_SET_VALUES.put("install_non_market_apps", "0");
+        PRE_SET_VALUES.put("adb_enabled", "0");
+        PRE_SET_VALUES.put("development_settings_enabled", "0");
     }
 
 

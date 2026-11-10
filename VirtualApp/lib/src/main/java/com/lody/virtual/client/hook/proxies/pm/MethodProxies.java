@@ -53,6 +53,33 @@ import mirror.android.content.pm.ParceledListSlice;
 @SuppressWarnings("unused")
 class MethodProxies {
 
+    private static String sVirtualPrefix;
+
+    private static String getVirtualPrefix() {
+        if (sVirtualPrefix == null) {
+            sVirtualPrefix = VirtualCore.get().getContext().getApplicationInfo().dataDir + "/virtual";
+        }
+        return sVirtualPrefix;
+    }
+
+    private static String stripVaPrefix(String path) {
+        String prefix = getVirtualPrefix();
+        if (path != null && path.startsWith(prefix)) {
+            return path.substring(prefix.length());
+        }
+        return path;
+    }
+
+    static void normalizeAppInfoPaths(ApplicationInfo ai) {
+        if (ai == null) return;
+        // nativeLibraryDir is consumed directly by the dynamic linker / ClassLoader for
+        // dlopen resolution, which does not fully pass through the IO redirect, so leave it
+        // on the real sandbox path to avoid breaking System.loadLibrary.
+        ai.dataDir = stripVaPrefix(ai.dataDir);
+        ai.sourceDir = stripVaPrefix(ai.sourceDir);
+        ai.publicSourceDir = stripVaPrefix(ai.publicSourceDir);
+    }
+
     static class IsPackageAvailable extends MethodProxy {
 
         @Override
@@ -636,6 +663,7 @@ class MethodProxies {
             int userId = VUserHandle.myUserId();
             PackageInfo packageInfo = VPackageManager.get().getPackageInfo(pkg, flags, userId);
             if (packageInfo != null) {
+                normalizeAppInfoPaths(packageInfo.applicationInfo);
                 return packageInfo;
             }
             packageInfo = (PackageInfo) method.invoke(who, args);
@@ -978,6 +1006,7 @@ class MethodProxies {
             int userId = VUserHandle.myUserId();
             ApplicationInfo info = VPackageManager.get().getApplicationInfo(pkg, flags, userId);
             if (info != null) {
+                normalizeAppInfoPaths(info);
                 return info;
             }
             info = (ApplicationInfo) method.invoke(who, args);

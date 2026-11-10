@@ -122,6 +122,14 @@ public class NativeEngine {
         }
     }
 
+    public static void setGuestPackage(String packageName) {
+        try {
+            nativeSetGuestPackage(packageName);
+        } catch (Throwable e) {
+            VLog.e(TAG, VLog.getStackTraceString(e));
+        }
+    }
+
     public static void enableIORedirect() {
         try {
             String soPath = new File(VirtualCore.get().getContext().getApplicationInfo().nativeLibraryDir, "libva++.so").getPath();
@@ -200,6 +208,8 @@ public class NativeEngine {
     private static native void nativeIOWhitelist(String path);
 
     private static native void nativeIOForbid(String path);
+
+    private static native void nativeSetGuestPackage(String packageName);
 
     private static native void nativeEnableIORedirect(String selfSoPath, int apiLevel, int previewApiLevel);
 

@@ -430,6 +430,9 @@ public final class VClientImpl extends IVClient.Stub {
                 }
             }
         }
+        NativeEngine.redirectDirectory("/data/app/" + info.packageName,
+                VEnvironment.getDataAppPackageDirectory(info.packageName).getAbsolutePath());
+        NativeEngine.setGuestPackage(info.packageName);
         NativeEngine.enableIORedirect();
     }
 

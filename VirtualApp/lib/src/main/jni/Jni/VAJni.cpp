@@ -37,7 +37,11 @@ static void jni_nativeIORedirect(alias_ref<jclass> jclazz, jstring origPath, jst
     ScopeUtfString orig_path(origPath);
     ScopeUtfString new_path(newPath);
     IOUniformer::redirect(orig_path.c_str(), new_path.c_str());
+}
 
+static void jni_nativeSetGuestPackage(alias_ref<jclass>, jstring pkg) {
+    ScopeUtfString guest_pkg(pkg);
+    setenv("V_GUEST_PKG", guest_pkg.c_str(), 1);
 }
 
 static jstring jni_nativeGetRedirectedPath(alias_ref<jclass> jclazz, jstring origPath) {
@@ -75,6 +79,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
                                          jni_nativeGetRedirectedPath),
                         makeNativeMethod("nativeReverseRedirectedPath",
                                          jni_nativeReverseRedirectedPath),
+                        makeNativeMethod("nativeSetGuestPackage",
+                                         jni_nativeSetGuestPackage),
                         makeNativeMethod("nativeLaunchEngine",
                                          jni_nativeLaunchEngine),
                 }
