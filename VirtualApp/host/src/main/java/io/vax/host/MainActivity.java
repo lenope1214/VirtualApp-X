@@ -25,14 +25,42 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(48, 96, 48, 48);
         TextView tv = new TextView(this);
-        tv.setText("VA-X host started");
+        tv.setText("VA-X host — tap an app to launch (no adb needed)");
         root.addView(tv);
-        setContentView(root);
+        // Tap launcher: lets a guest be launched by finger so the device's USB-debugging
+        // state is irrelevant to how the launch is triggered. Driving it from adb forces
+        // adb_enabled on; tapping here does not.
+        populateLauncher(root);
+        scroll.addView(root);
+        setContentView(scroll);
         handle(getIntent());
+    }
+
+    private void populateLauncher(LinearLayout root) {
+        try {
+            java.util.List<com.lody.virtual.remote.InstalledAppInfo> apps =
+                    VirtualCore.get().getInstalledApps(0);
+            for (com.lody.virtual.remote.InstalledAppInfo info : apps) {
+                final String pkg = info.packageName;
+                android.widget.Button b = new android.widget.Button(this);
+                b.setText(pkg);
+                b.setOnClickListener(v -> new Thread(() -> {
+                    try {
+                        doLaunch(pkg);
+                    } catch (Throwable t) {
+                        Log.e(TAG, "launch failed for " + pkg, t);
+                    }
+                }, "vax-launch").start());
+                root.addView(b);
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "populateLauncher failed", t);
+        }
     }
 
     @Override
