@@ -40,7 +40,7 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
 | P1-c | 최소 호스트 앱(`host`) + 시험용 타깃(`hello`) 작성 | ✅ 완료 — 호스트가 Android 16에서 크래시 없이 시작, `VirtualCore.startup OK` (A2 충족) |
 | P2 | Android 16 프레임워크 대응: hidden API 우회, AMS/ATMS/PM 훅, 앱 프로세스 기동 | ✅ 완료 — hello가 가상 프로세스(uid 10001, 데이터 `virtual/` 하위)에서 화면까지 뜸 |
 | P3 | split APK 설치 파이프라인, arm64 라이브러리 추출 | ✅ 완료 — 빈두 base+split 4개 설치, arm64 .so 3개 추출 (A3 충족) |
-| P4 | 저장소/IO 리다이렉션 (scoped storage 경로) | 🔄 부분 (maps 파서 arm64 수정; ELF64 심볼테이블/기능검증 남음) |
+| P4 | 저장소/IO 리다이렉션 (scoped storage 경로) | ✅ 핵심 완료 (openat/open·statfs 리다이렉트, dlopen, 최장일치, /sdcard 가상 스토리지 격리; hookAndroidVM만 별도) |
 | P4.5 | PendingIntent/bindService 패키지 스푸핑 훅 (Android 11+ `bindServiceInstance`/`getIntentSenderWithFeature`) | ✅ 완료 |
 | P5 | 빈두 실행 안정화 (Godot/Vulkan, WebRTC, 알림) | ⬜ |
 | P6 | (필요 시) Google 서비스 | ⬜ |
@@ -144,4 +144,9 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
   - 결함: `relocate_path`가 `replace_items`를 **등록 순서로 첫 매칭**에서 반환. 규칙이 넓은 것부터 등록되어(`/data/data/<pkg>` → dataDir 가 `/data/data/<pkg>/lib/` → 앱 lib 보다 먼저), 게스트가 `/data/data/<pkg>/lib/foo.so`를 열면 **앱 lib 디렉터리가 아니라 dataDir/lib로 잘못 리다이렉트**됨(실제 .so가 없는 곳).
   - 수정: 매칭되는 항목 중 `orig_size`가 가장 긴(=가장 구체적인) 규칙을 선택. 단일 매칭 시 동작 불변.
   - 검증(hello dlopen 프로브, 절대경로 `/data/data/io.vax.hello/lib/libz.so`): 수정 전 리다이렉트 대상이 dataDir(`virtual/data/user/0/io.vax.hello/lib/`), 수정 후 앱 lib(`virtual/data/app/io.vax.hello/lib/`)로 바뀜 → 앱 lib에 libz.so를 두자 `dlopen -> ok`. dataDir 경로(쓰기/`statvfs`)는 그대로 통과(회귀 없음). hello FATAL 0/SIGSEGV 0. 도깨비 회귀: FATAL 2건 모두 기존 CNF, SIGSEGV 0, 금지 경고 0(`libpenguin.so` 미로드는 이전부터 있던 Samsung 벤더 노이즈, soname 로드라 relocate 대상 아님).
+- 2026-11-10 **/sdcard 가상 스토리지 격리 켜기 (`MainActivity.java`, 사용자 위임 결정)**:
+  - 기존: 가상 스토리지가 꺼져 있어 게스트 `/sdcard` 쓰기가 scoped storage로 `EPERM`. 외부 저장소가 격리되지 않음.
+  - 수정: 설치 성공 시 패키지별로 `VirtualStorageManager.setVirtualStorage(pkg,0,<호스트 내부경로>)` + `setVirtualStorageState(pkg,0,true)`. vsPath는 호스트 **내부** `getFilesDir()/vstorage/<pkg>`로 둠 — `/sdcard` 밑이 아니라서 `/sdcard` 리다이렉트의 재귀 대상이 되지 않고, host uid가 자유롭게 씀.
+  - 검증(hello `/sdcard` 프로브): `EPERM` → `wrote`. 실제 파일은 `files/vstorage/io.vax.hello/vax_io_sdcard_probe.txt`(샌드박스)에만 존재, **실제 `/sdcard`에는 생기지 않음**(격리·A6). 도깨비 회귀: FATAL 4건 모두 기존 CNF, SIGSEGV 0, 금지 경고 0. 도깨비에도 가상 스토리지 적용됨.
+  - 정책 메모: 외부 저장소를 공유가 아니라 **격리**로 선택(A6 "원본에 영향 없음"에 부합). 미디어 공유가 필요한 앱은 추후 공유 모드 옵션이 필요할 수 있음.
 

@@ -69,6 +69,20 @@ public class MainActivity extends Activity {
         Log.i(TAG, "install result: success=" + (r != null && r.isSuccess)
                 + " pkg=" + (r == null ? null : r.packageName)
                 + " error=" + (r == null ? null : r.error));
+        if (r != null && r.isSuccess) {
+            // Isolate the guest's external storage into a per-package sandbox dir. Without this the
+            // guest (running as the host uid) hits EPERM on /sdcard under scoped storage. The vs
+            // path lives under the host's INTERNAL files dir, not under /sdcard, so it is never a
+            // target of the /sdcard redirect itself (no recursive relocation) and the host uid can
+            // write it freely.
+            java.io.File vs = new java.io.File(getFilesDir(), "vstorage/" + pkg);
+            vs.mkdirs();
+            com.lody.virtual.client.ipc.VirtualStorageManager vsm =
+                    com.lody.virtual.client.ipc.VirtualStorageManager.get();
+            vsm.setVirtualStorage(pkg, 0, vs.getAbsolutePath());
+            vsm.setVirtualStorageState(pkg, 0, true);
+            Log.i(TAG, "virtual storage enabled for " + pkg + " -> " + vs.getAbsolutePath());
+        }
     }
 
     private void doLaunch(String pkg) {
