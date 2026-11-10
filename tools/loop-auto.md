@@ -68,7 +68,8 @@
 - [x] **linker64 do_dlopen 훅 (ELF64 파서 대체)** — ELF64 파서 가정은 틀렸음: 실기 `linker64`가 stripped라 `dlopen`/`do_dlopen` 심볼이 `.symtab`/`.dynsym` 어디에도 없음. 공개 `dlopen`을 `dlsym`으로 훅하도록 교체. `cannot read symbol table`/`elf error 2` 7→0 — `221a397a`.
 - [x] **게스트 dlopen 리다이렉트 기능 검증** — hello에 네이티브 dlopen 프로브(`libvaxprobe`) 추가. 절대경로 `dlopen`이 샌드박스로 재작성되어 `-> ok` 확인 — `ca076168`.
 - [x] **android_dlopen_ext 훅 검토 → 불필요 결론** — `System.loadLibrary`가 샌드박스에서 정상 로드(ART가 `nativeLibraryDir` 절대경로로 해석). 기능상 필요 없음(검증: `ca076168`에서 libvaxprobe 로드 성공).
-- [ ] **relocate_path 접두사 매칭 순서** — `/data/data/<pkg>`(dataDir)가 `/data/data/<pkg>/lib/`(앱 lib)보다 먼저 등록돼 먼저 매칭됨. 최장 접두사 일치가 아니면 lib 전용 리다이렉트가 사실상 무시됨. `NativeEngine.redirectDirectory`/native `add_pair` 매칭 로직 확인 후, 최장일치 또는 등록 순서 조정. 검증: hello에서 `/data/data/<pkg>/lib/`와 dataDir를 각각 다른 대상으로 두고 구분되는지.
+- [x] **relocate_path 최장 접두사 일치** — 첫 매칭 반환 → 최장 `orig_size` 선택으로 변경. `/data/data/<pkg>/lib/`가 dataDir 대신 앱 lib로 올바로 리다이렉트됨 확인(hello dlopen 프로브) — `7df3d5d0`.
+- [ ] **발견 대기** — 각 반복 logcat 스캔으로 새 범위 안 항목을 여기에 추가.
 - [ ] **발견 대기** — 각 반복 logcat 스캔으로 새 범위 안 항목을 여기에 추가.
 
 ## 완료 로그
@@ -81,6 +82,7 @@
 - [x] statfs 리다이렉트 복구(공개 심볼) — `79c2b80c`
 - [x] linker64 dlopen 훅(공개 dlopen) — `221a397a`
 - [x] 게스트 dlopen 리다이렉트 기능 검증(hello 네이티브 프로브) + android_dlopen_ext 불필요 결론 — `ca076168`
+- [x] relocate_path 최장 접두사 일치(앱 lib vs dataDir 구분) — `7df3d5d0`
 
 ## 범위 밖 (참고, 건드리지 않음)
 
