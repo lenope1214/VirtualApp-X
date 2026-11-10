@@ -60,17 +60,19 @@
 우선순위 순. 루프가 매 반복 7번에서 이 목록을 갱신한다.
 
 - [x] **P6 GMS/Play Store 가시성** — `requires the Google Play Store`, `Invalid GmsCore APK`, `NameNotFound com.google.android.gms` 해소 — `c191e41b` (+ bind flags long 캐스트 결함 `ClassCastException` 44→0 동반 수정).
-- [보류 — 사용자 판단 필요] **GMS 호출자 패키지 검증** — `GoogleApiManager: Unknown calling package name 'com.kakaogames.dokkaebi'`, `FirebaseMessaging error configuring notification delegate`. GMS가 호출자 uid(호스트)와 패키지명(게스트) 불일치를 거부. 해결은 Google 서비스에 호출자 신원을 위조하는 것이라 무결성/검증 우회에 해당할 수 있어 루프가 자동 구현하지 않음. 진행하려면 사용자가 명시적으로 승인해야 함.
+- [차단 — 비root 불가] **GMS 호출자 패키지 검증** — `GoogleApiManager: Unknown calling package name`. 예외는 **실제 GMS 프로세스**가 호출자 UID를 실제 시스템 PM으로 검증하며 던짐. VA 훅은 게스트/호스트 프로세스 내부만 바꿔 실제 system_server를 못 바꿈. 해결엔 시스템 전역 설치/root 또는 앱에 호스트 신원 제시(앱 식별·API 키 깨짐, 범위 밖)가 필요 → 비root 기기에선 불가.
 - [x] **P4 IO 리다이렉션 기능 검증** — 절대경로 열기가 리다이렉트되지 않던 결함(`__openat` 미노출, API 36에서 열기 훅 미설치) 수정: 공개 심볼 `openat`/`open` 훅. `/data/data/<pkg>` 쓰기가 호스트 `virtual/`로 리다이렉트됨 확인. — `af3d44df`.
 - [x] **미노출 심볼 훅 보강 (statfs)** — `__statfs`/`__statfs64`가 dlsym NULL(API 36)이라 미설치였음. 공개 `statfs`(=`statfs64` 동일 주소)로 교체해 리다이렉트 복구. hello `statvfs` 프로브 ENOENT→ok 검증 — `79c2b80c`.
-- [보류 — 설계 결정 필요] **getcwd 리다이렉트** — 기존 `__getcwd` 훅은 리다이렉트를 하지 않는 빈 스텁이라 제거함. 실제 리다이렉트하려면 반환 경로 역변환(`reverse_relocate`)이 필요하고, 그러면 앱이 보는 cwd가 바뀌어 동작 변경 위험. 적용 방향을 사용자가 결정해야 함.
+- [skip — 판단: 미적용] **getcwd 리다이렉트** — 반환 경로 역변환이 필요하고 앱이 보는 cwd가 바뀌어 동작 변경 위험. 효과 대비 위험이 커서 미적용.
 - [x] **/sdcard 가상 스토리지 격리** — 설치 시 패키지별 가상 스토리지 켬(vsPath=호스트 내부). `/sdcard` 쓰기 EPERM→샌드박스 성공, 실제 /sdcard 미유출 — `44431891`. (정책: 격리 선택)
 - [x] **linker64 do_dlopen 훅 (ELF64 파서 대체)** — ELF64 파서 가정은 틀렸음: 실기 `linker64`가 stripped라 `dlopen`/`do_dlopen` 심볼이 `.symtab`/`.dynsym` 어디에도 없음. 공개 `dlopen`을 `dlsym`으로 훅하도록 교체. `cannot read symbol table`/`elf error 2` 7→0 — `221a397a`.
 - [x] **게스트 dlopen 리다이렉트 기능 검증** — hello에 네이티브 dlopen 프로브(`libvaxprobe`) 추가. 절대경로 `dlopen`이 샌드박스로 재작성되어 `-> ok` 확인 — `ca076168`.
 - [x] **android_dlopen_ext 훅 검토 → 불필요 결론** — `System.loadLibrary`가 샌드박스에서 정상 로드(ART가 `nativeLibraryDir` 절대경로로 해석). 기능상 필요 없음(검증: `ca076168`에서 libvaxprobe 로드 성공).
 - [x] **relocate_path 최장 접두사 일치** — 첫 매칭 반환 → 최장 `orig_size` 선택으로 변경. `/data/data/<pkg>/lib/`가 dataDir 대신 앱 lib로 올바로 리다이렉트됨 확인(hello dlopen 프로브) — `7df3d5d0`.
-- [ ] **발견 대기** — 각 반복 logcat 스캔으로 새 범위 안 항목을 여기에 추가.
-- [ ] **발견 대기** — 각 반복 logcat 스캔으로 새 범위 안 항목을 여기에 추가.
+- [대형/고위험 — 명시 요청 시만] **hookAndroidVM 재구현** — API 30+에서 jmethodID 불투명 인덱스라 이전에 SIGSEGV. getCallingUid/openDexFile/카메라/오디오 훅 비활성. 모든 게스트를 깨뜨릴 위험이 있어 무인 자동 루프로 진행 안 함. 사용자가 명시 요청 시 사람이 함께 신중히.
+- [범위 밖] **도깨비 DokkaebiUnityActivity CNF** — LIAPP 패커 런타임 클래스 로딩. 우회는 하지 않음.
+
+> 상태(2026-11-10): 깨끗한 범위 안 항목 소진. 남은 건 비root 차단(GMS), 저위험가치(getcwd), 대형/고위험(hookAndroidVM), 범위 밖(패커)뿐이라 자동 루프 종료. IO/저장소/호환성 핵심은 완료·검증됨.
 
 ## 완료 로그
 
