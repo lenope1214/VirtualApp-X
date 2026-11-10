@@ -128,4 +128,10 @@ VirtualApp 기반 안드로이드 가상화 컨테이너를 내 요구에 맞게
   - 적용: 훅 대상을 공개 `statfs`로 교체(시그니처 `(path, buf)` 동일, `syscall(__NR_statfs)`로 리다이렉트). `statfs64`는 `statfs`와 같은 주소라 별도 훅하면 이중 패치 위험이라 제외. 죽은 `__statfs64`/`__getcwd` 정의와 등록 제거.
   - `getcwd` 미적용 이유: 기존 `__getcwd` 훅은 리다이렉트를 전혀 하지 않는 빈 스텁이었음. 공개 심볼에 같은 스텁을 걸어도 효과가 없고, 실제 리다이렉트하려면 반환 경로를 역변환(`reverse_relocate`)해야 해서 앱이 보는 cwd가 바뀌는 위험이 있음 → 설계 결정으로 보류.
   - 검증: hello에 `Os.statvfs("/data/data/io.vax.hello")` 프로브 추가. 수정 전 `ENOENT`(실재하지 않는 실제 경로) → 수정 후 `ok blocks=120507891`(샌드박스 경로로 리다이렉트). hello FATAL 0 / SIGSEGV 0. 도깨비 회귀: FATAL 3건 모두 기존 CNF, SIGSEGV 0, 금지 경고 0, statfs/getcwd 관련 오류 0.
+- 2026-11-10 **linker64 do_dlopen 훅 — 내부 심볼 대신 공개 `dlopen` 훅 (`IOUniformer.cpp`)**:
+  - 확인(실기 `/apex/com.android.runtime/bin/linker64`를 `llvm-nm`으로): `.symtab`과 `.dynsym` 모두 `dlopen`/`do_dlopen` 관련 심볼이 없음(stripped). 따라서 ELF64 파서를 고쳐도 `do_dlopen`은 이름으로 찾을 수 없음 — 백로그 가정이 틀렸음.
+  - 공개 심볼: `libdl`/`libc`의 `dlopen`, `dlsym`, `android_dlopen_ext`는 `dlsym`으로 해석 가능(공개).
+  - 수정: API 24+에서 `do_dlopen` 조회 대신 `dlsym(RTLD_DEFAULT, "dlopen")`에 기존 `new_dlopen` 훅을 설치. 기존 `dlopen` 훅은 경로만 리다이렉트하고 `onSoLoaded`는 빈 함수라 부작용 없음. API 19–23 분기는 그대로.
+  - 검증: `cannot read symbol table` / `Error ELF parsing ...linker64` / `elf error 2` 각 7 → 0. `VAX-IO dlopen hook installed` 7 프로세스. 도깨비 실행 FATAL 1건(기존 CNF만), SIGSEGV 0, 금지 경고 0.
+  - 한계(정직하게): 이 훅은 `dlopen()` 직접 호출만 잡음. ART의 `System.loadLibrary`가 쓰는 `android_dlopen_ext`는 훅 대상이 아님(VA가 nativeLibraryDir 절대경로로 넘기므로 현 상황에선 충분하다고 판단). 게스트 `dlopen` 절대경로 리다이렉트의 **기능 검증은 아직 테스트 경로가 없어 미완**.
 

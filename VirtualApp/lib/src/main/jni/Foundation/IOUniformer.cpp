@@ -642,10 +642,13 @@ int findSymbol(const char *name, const char *libn,
 void hook_dlopen(int api_level) {
     void *symbol = NULL;
     if (api_level > 23) {
-        if (findSymbol("__dl__Z9do_dlopenPKciPK17android_dlextinfoPv", "linker",
-                       (unsigned long *) &symbol) == 0) {
-            MSHookFunction(symbol, (void *) new_do_dlopen_V24,
-                          (void **) &orig_do_dlopen_V24);
+        // linker64 on Android 7+ is stripped: the internal do_dlopen cannot be resolved by name
+        // (no .symtab/.dynsym entry, so every lookup failed with "elf error"). Hook the exported
+        // dlopen wrapper instead; it is resolvable with dlsym and covers direct dlopen() callers.
+        symbol = dlsym(RTLD_DEFAULT, "dlopen");
+        if (symbol != NULL) {
+            MSHookFunction(symbol, (void *) new_dlopen, (void **) &orig_dlopen);
+            ALOGD("VAX-IO dlopen hook installed on exported dlopen");
         }
     } else if (api_level >= 19) {
         if (findSymbol("__dl__Z9do_dlopenPKciPK17android_dlextinfo", "linker",
