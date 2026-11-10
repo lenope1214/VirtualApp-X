@@ -49,6 +49,19 @@ public class HelloActivity extends Activity {
             if (line.startsWith("Name:") || line.startsWith("TracerPid:"))
                 sb.append("\n[proc] ").append(line.trim());
         }
+        sb.append("\n[proc] comm=").append(readProc("/proc/self/comm").trim());
+        String env = readProc("/proc/self/environ");
+        int envLeak = 0;
+        for (String e : env.split("\0")) {
+            if (e.startsWith("LD_PRELOAD=") || e.startsWith("V_")) envLeak++;
+        }
+        sb.append("\n[proc] environ LD_PRELOAD/V_-leak=").append(envLeak);
+        String mounts = readProc("/proc/self/mounts");
+        int mountLeak = 0;
+        for (String line : mounts.split("\n")) {
+            if (line.contains("io.vax.host") || line.contains("/virtual/")) mountLeak++;
+        }
+        sb.append("\n[proc] mounts VA-leak=").append(mountLeak);
         return sb.toString();
     }
 
