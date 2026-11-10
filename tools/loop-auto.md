@@ -64,7 +64,7 @@
 - [x] **P4 IO 리다이렉션 기능 검증** — 절대경로 열기가 리다이렉트되지 않던 결함(`__openat` 미노출, API 36에서 열기 훅 미설치) 수정: 공개 심볼 `openat`/`open` 훅. `/data/data/<pkg>` 쓰기가 호스트 `virtual/`로 리다이렉트됨 확인. — `af3d44df`.
 - [x] **미노출 심볼 훅 보강 (statfs)** — `__statfs`/`__statfs64`가 dlsym NULL(API 36)이라 미설치였음. 공개 `statfs`(=`statfs64` 동일 주소)로 교체해 리다이렉트 복구. hello `statvfs` 프로브 ENOENT→ok 검증 — `79c2b80c`.
 - [보류 — 설계 결정 필요] **getcwd 리다이렉트** — 기존 `__getcwd` 훅은 리다이렉트를 하지 않는 빈 스텁이라 제거함. 실제 리다이렉트하려면 반환 경로 역변환(`reverse_relocate`)이 필요하고, 그러면 앱이 보는 cwd가 바뀌어 동작 변경 위험. 적용 방향을 사용자가 결정해야 함.
-- [보류 — 설계 결정 필요] **/sdcard 가상 스토리지 리다이렉트 정책** — 현재 `/sdcard`는 권한 없는 게스트에 `EPERM`(scoped storage)이고 VA 가상 스토리지가 꺼져 있어 리다이렉트 안 됨. 게스트 외부 저장소를 샌드박스로 격리할지(가상 스토리지 켜기 vs 공유 유지)는 사용자 정책 결정 사항.
+- [x] **/sdcard 가상 스토리지 격리** — 설치 시 패키지별 가상 스토리지 켬(vsPath=호스트 내부). `/sdcard` 쓰기 EPERM→샌드박스 성공, 실제 /sdcard 미유출 — `44431891`. (정책: 격리 선택)
 - [x] **linker64 do_dlopen 훅 (ELF64 파서 대체)** — ELF64 파서 가정은 틀렸음: 실기 `linker64`가 stripped라 `dlopen`/`do_dlopen` 심볼이 `.symtab`/`.dynsym` 어디에도 없음. 공개 `dlopen`을 `dlsym`으로 훅하도록 교체. `cannot read symbol table`/`elf error 2` 7→0 — `221a397a`.
 - [x] **게스트 dlopen 리다이렉트 기능 검증** — hello에 네이티브 dlopen 프로브(`libvaxprobe`) 추가. 절대경로 `dlopen`이 샌드박스로 재작성되어 `-> ok` 확인 — `ca076168`.
 - [x] **android_dlopen_ext 훅 검토 → 불필요 결론** — `System.loadLibrary`가 샌드박스에서 정상 로드(ART가 `nativeLibraryDir` 절대경로로 해석). 기능상 필요 없음(검증: `ca076168`에서 libvaxprobe 로드 성공).
