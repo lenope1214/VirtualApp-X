@@ -66,8 +66,9 @@
 - [보류 — 설계 결정 필요] **getcwd 리다이렉트** — 기존 `__getcwd` 훅은 리다이렉트를 하지 않는 빈 스텁이라 제거함. 실제 리다이렉트하려면 반환 경로 역변환(`reverse_relocate`)이 필요하고, 그러면 앱이 보는 cwd가 바뀌어 동작 변경 위험. 적용 방향을 사용자가 결정해야 함.
 - [보류 — 설계 결정 필요] **/sdcard 가상 스토리지 리다이렉트 정책** — 현재 `/sdcard`는 권한 없는 게스트에 `EPERM`(scoped storage)이고 VA 가상 스토리지가 꺼져 있어 리다이렉트 안 됨. 게스트 외부 저장소를 샌드박스로 격리할지(가상 스토리지 켜기 vs 공유 유지)는 사용자 정책 결정 사항.
 - [x] **linker64 do_dlopen 훅 (ELF64 파서 대체)** — ELF64 파서 가정은 틀렸음: 실기 `linker64`가 stripped라 `dlopen`/`do_dlopen` 심볼이 `.symtab`/`.dynsym` 어디에도 없음. 공개 `dlopen`을 `dlsym`으로 훅하도록 교체. `cannot read symbol table`/`elf error 2` 7→0 — `221a397a`.
-- [ ] **게스트 dlopen 리다이렉트 기능 검증** — 공개 `dlopen` 훅이 실제로 절대경로를 샌드박스로 리다이렉트하는지 확인. 테스트 경로 설계 필요(hello는 native lib이 없고 Java `System.load`는 `android_dlopen_ext`를 써서 훅 대상이 아님). 예: hello에 NDK로 작은 `.so`를 넣거나, 도깨비 `lib/` 경로로 dlopen되는 기존 .so를 활용. 검증: 리다이렉트 전 실패 → 후 성공을 로그로 확인.
-- [ ] **android_dlopen_ext 훅 검토** — ART `System.loadLibrary`가 쓰는 경로. 현재 미훅. 필요성은 기능 검증 결과에 따라 결정(VA가 nativeLibraryDir 절대경로를 넘기므로 우선순위 낮음).
+- [x] **게스트 dlopen 리다이렉트 기능 검증** — hello에 네이티브 dlopen 프로브(`libvaxprobe`) 추가. 절대경로 `dlopen`이 샌드박스로 재작성되어 `-> ok` 확인 — `ca076168`.
+- [x] **android_dlopen_ext 훅 검토 → 불필요 결론** — `System.loadLibrary`가 샌드박스에서 정상 로드(ART가 `nativeLibraryDir` 절대경로로 해석). 기능상 필요 없음(검증: `ca076168`에서 libvaxprobe 로드 성공).
+- [ ] **relocate_path 접두사 매칭 순서** — `/data/data/<pkg>`(dataDir)가 `/data/data/<pkg>/lib/`(앱 lib)보다 먼저 등록돼 먼저 매칭됨. 최장 접두사 일치가 아니면 lib 전용 리다이렉트가 사실상 무시됨. `NativeEngine.redirectDirectory`/native `add_pair` 매칭 로직 확인 후, 최장일치 또는 등록 순서 조정. 검증: hello에서 `/data/data/<pkg>/lib/`와 dataDir를 각각 다른 대상으로 두고 구분되는지.
 - [ ] **발견 대기** — 각 반복 logcat 스캔으로 새 범위 안 항목을 여기에 추가.
 
 ## 완료 로그
@@ -76,6 +77,10 @@
 - [x] arm64 `/proc/maps` 파서 (버퍼/경계/64비트 주소) — `735bb34d`
 - [x] AutoFillManagerStub NPE → autofill 프록시 항상 설치 — `5d0521f2`
 - [x] GMS/Play Store 가시성 + bindServiceInstance long 플래그 캐스트 수정 — `c191e41b`
+- [x] 절대경로 열기 리다이렉트(openat/open 훅) — `af3d44df`
+- [x] statfs 리다이렉트 복구(공개 심볼) — `79c2b80c`
+- [x] linker64 dlopen 훅(공개 dlopen) — `221a397a`
+- [x] 게스트 dlopen 리다이렉트 기능 검증(hello 네이티브 프로브) + android_dlopen_ext 불필요 결론 — `ca076168`
 
 ## 범위 밖 (참고, 건드리지 않음)
 
